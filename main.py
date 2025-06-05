@@ -3,18 +3,15 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button
 
-# Intents potrzebne do nadawania ról i obsługi wiadomości
 intents = discord.Intents.default()
 intents.members = True
-intents.message_content = True  # Wymagane do odczytu treści wiadomości
+intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Stałe ID kanału i roli – ZMIEŃ NA SWOJE
-CHANNEL_ID = 1373258480382771270
-ROLE_ID = 1373275307150278686
+CHANNEL_ID = 1373258480382771270  # Podmień na swój kanał
+ROLE_ID = 1373275307150278686     # Podmień na swoją rolę
 
-# Persistent View z poprawnym callbackiem
 class VerificationView(View):
     def __init__(self, role_id):
         super().__init__(timeout=None)
@@ -23,7 +20,7 @@ class VerificationView(View):
     @discord.ui.button(
         label="Zweryfikuj się",
         style=discord.ButtonStyle.green,
-        custom_id="verify_button"  # wymagane dla persistent view
+        custom_id="verify_button"
     )
     async def verify_button(self, interaction: discord.Interaction, button: Button):
         print(f"Kliknął: {interaction.user} ({interaction.user.id})")
@@ -42,12 +39,9 @@ class VerificationView(View):
         except Exception as e:
             await interaction.response.send_message(f"❗ Wystąpił błąd: {e}", ephemeral=True)
 
-# Event po zalogowaniu bota
 @bot.event
 async def on_ready():
     print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
-
-    # Zarejestruj persistent view, aby działał po restarcie
     bot.add_view(VerificationView(ROLE_ID))
 
     channel = bot.get_channel(CHANNEL_ID)
@@ -60,12 +54,14 @@ async def on_ready():
         if message.author == bot.user:
             await message.delete()
 
-    # Wyślij nową wiadomość z przyciskiem
-    await channel.send(
-        "Kliknij przycisk poniżej, aby się zweryfikować:",
-        view=VerificationView(ROLE_ID)
+    # Stwórz embed
+    embed = discord.Embed(
+        title="🔒 Weryfikacja",
+        description="Kliknij przycisk poniżej, aby otrzymać dostęp do serwera.",
+        color=discord.Color.green()
     )
-    print("✅ Wysłano wiadomość weryfikacyjną.")
 
-# Uruchomienie bota z tokenem z ENV
+    await channel.send(embed=embed, view=VerificationView(ROLE_ID))
+    print("✅ Wysłano wiadomość weryfikacyjną (embed + przycisk).")
+
 bot.run(os.getenv("DISCORD_TOKEN"))
