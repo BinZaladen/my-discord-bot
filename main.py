@@ -3,18 +3,18 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button
 
-# Intents wymagane do zarządzania członkami i odczytu wiadomości
+# Intents potrzebne do nadawania ról i obsługi wiadomości
 intents = discord.Intents.default()
 intents.members = True
-intents.message_content = True
+intents.message_content = True  # Wymagane do odczytu treści wiadomości
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ID kanału i roli
-CHANNEL_ID = 1373258480382771270  # ← ZMIEŃ NA SWÓJ KANAŁ
-ROLE_ID = 1373275307150278686     # ← ZMIEŃ NA SWOJĄ ROLĘ
+# Stałe ID kanału i roli – ZMIEŃ NA SWOJE
+CHANNEL_ID = 1373258480382771270
+ROLE_ID = 1373275307150278686
 
-# Persistent View z przyciskiem
+# Persistent View z poprawnym callbackiem
 class VerificationView(View):
     def __init__(self, role_id):
         super().__init__(timeout=None)
@@ -23,31 +23,31 @@ class VerificationView(View):
     @discord.ui.button(
         label="Zweryfikuj się",
         style=discord.ButtonStyle.green,
-        custom_id="verify_button"  # wymagane dla persistent View
+        custom_id="verify_button"  # wymagane dla persistent view
     )
-    async def verify_button(self, button: Button, interaction: discord.Interaction):
+    async def verify_button(self, interaction: discord.Interaction, button: Button):
         print(f"Kliknął: {interaction.user} ({interaction.user.id})")
         role = discord.utils.get(interaction.guild.roles, id=self.role_id)
 
-        if role is None:
+        if not role:
             await interaction.response.send_message("❌ Nie znaleziono roli.", ephemeral=True)
             return
 
         try:
             await interaction.user.add_roles(role)
             await interaction.response.send_message("✅ Zostałeś zweryfikowany!", ephemeral=True)
-            print(f"Rola '{role.name}' nadana użytkownikowi {interaction.user}.")
+            print(f"Nadano rolę '{role.name}' użytkownikowi {interaction.user}.")
         except discord.Forbidden:
-            await interaction.response.send_message("🚫 Brak uprawnień do nadania roli.", ephemeral=True)
+            await interaction.response.send_message("🚫 Bot nie ma uprawnień do nadania roli.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message("❗ Błąd: " + str(e), ephemeral=True)
+            await interaction.response.send_message(f"❗ Wystąpił błąd: {e}", ephemeral=True)
 
-# Event: Bot się uruchomił
+# Event po zalogowaniu bota
 @bot.event
 async def on_ready():
     print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
 
-    # Zarejestruj View globalnie (musi być persistent!)
+    # Zarejestruj persistent view, aby działał po restarcie
     bot.add_view(VerificationView(ROLE_ID))
 
     channel = bot.get_channel(CHANNEL_ID)
@@ -67,5 +67,5 @@ async def on_ready():
     )
     print("✅ Wysłano wiadomość weryfikacyjną.")
 
-# Uruchom bota
+# Uruchomienie bota z tokenem z ENV
 bot.run(os.getenv("DISCORD_TOKEN"))
