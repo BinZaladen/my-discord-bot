@@ -1,57 +1,55 @@
 import os
 import discord
 from discord.ext import commands
-from discord.ui import Button, View
+from discord.ui import View, Button
+from discord import ButtonStyle
 
 # Ustawienia bota
 intents = discord.Intents.default()
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ID kanału i roli
+# ID kanału, na którym bot ma wysyłać wiadomości
 CHANNEL_ID = 1373258480382771270
+# ID roli do nadania po weryfikacji
 ROLE_ID = 1373275307150278686
-GUILD_ID = 1373253103176122399
 
-# Zmienna do przechowywania ostatniej wysłanej wiadomości
-last_message = None
-
-class VerifyButton(Button):
-    def __init__(self):
-        super().__init__(label="Zweryfikuj", style=discord.ButtonStyle.green)
-
-    async def callback(self, interaction: discord.Interaction):
-        role = interaction.guild.get_role(ROLE_ID)
-        if role:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"Rola {role.name} została przypisana!", ephemeral=True)
-        else:
-            await interaction.response.send_message("Nie znaleziono roli.", ephemeral=True)
-
-@bot.event
-async def on_ready():
-    await bot.tree.sync()
-    print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
-
-@bot.command()
-async def send_verification(ctx):
-    """Wysyła wiadomość z przyciskiem weryfikacyjnym do określonego kanału."""
-    global last_message
-
-    # Pobieranie kanału
+# Funkcja do wysyłania wiadomości z przyciskiem
+async def send_verification_message():
     channel = bot.get_channel(CHANNEL_ID)
-    if not channel:
-        await ctx.send("Nie znaleziono kanału.")
-        return
+    if channel:
+        # Usuwanie poprzednich wiadomości
+        async for message in channel.history(limit=100):
+            await message.delete()
 
-    # Usuwanie poprzedniej wiadomości, jeśli istnieje
-    if last_message:
-        await last_message.delete()
+        # Tworzenie przycisku
+        button = Button(label="Zweryfikuj się", style=ButtonStyle.green)
+        view = View()
+        view.add_item(button)
 
-    # Tworzenie widoku z przyciskiem
-    view = View()
-    view.add_item(VerifyButton())
+        # Wysyłanie wiadomości z przyciskiem
+        await channel.send("Kliknij przycisk, aby się zweryfikować:", view=view)
 
-    # Wysyłanie nowej wiadomości
-    last_message = await channel.send("Kliknij przycisk, aby się zweryfikować:", view=view)
+        # Funkcja obsługująca kliknięcie przycisku
+        async def button_callback(interaction: discord.Interaction):
+            role = discord.utils.get(interaction.guild.roles, id=ROLE_ID)
+            if role:
+                await interaction.user.add_roles(role)
+                await interaction.response.send_message("Zostałeś zweryfikowany!", ephemeral=True)
+            else:
+                await interaction.response.send_message("Nie znaleziono roli do nadania.", ephemeral=True)
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+        # Rejestracja funkcji obsługującej kliknięcie przycisku
+        button.callback = button_callback
+
+# Komenda do wysyłania wiadomości z przyciskiem
+@bot.command()
+async def start_verification(ctx):
+    await send_verification_message()
+
+# Uruchomienie bota
+token = os.getenv("DISCORD_TOKEN")
+if token:
+    bot.run(token)
+else:
+    print("Brak tokena bota.")
