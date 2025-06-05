@@ -15,5 +15,9 @@ async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
     await interaction.response.send_message(f"Pong! 🏓 Opóźnienie: {latency} ms")
 
-bot.run(os.getenv("DISCORD_TOKEN"))
-
+token = os.getenv("DISCORD_TOKEN")
+if token is None:
+    print("Błąd: Brak tokena Discorda.")
+else:
+    client = discord.Client()
+    client.run(token)
