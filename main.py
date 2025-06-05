@@ -9,8 +9,8 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-CHANNEL_ID = 1373258480382771270  # Podmień na swój kanał
-ROLE_ID = 1373275307150278686     # Podmień na swoją rolę
+CHANNEL_ID = 1373258480382771270
+ROLE_ID = 1373275307150278686
 
 class VerificationView(View):
     def __init__(self, role_id):
@@ -35,9 +35,9 @@ class VerificationView(View):
             await interaction.response.send_message("✅ Zostałeś zweryfikowany!", ephemeral=True)
             print(f"Nadano rolę '{role.name}' użytkownikowi {interaction.user}.")
         except discord.Forbidden:
-            await interaction.response.send_message("🚫 Bot nie ma uprawnień do nadania roli.", ephemeral=True)
+            await interaction.followup.send("🚫 Bot nie ma uprawnień do nadania roli.", ephemeral=True)
         except Exception as e:
-            await interaction.response.send_message(f"❗ Wystąpił błąd: {e}", ephemeral=True)
+            await interaction.followup.send(f"❗ Wystąpił błąd: {e}", ephemeral=True)
 
 @bot.event
 async def on_ready():
@@ -49,12 +49,10 @@ async def on_ready():
         print("❌ Nie znaleziono kanału.")
         return
 
-    # Usuń stare wiadomości bota
     async for message in channel.history(limit=100):
         if message.author == bot.user:
             await message.delete()
 
-    # Stwórz embed
     embed = discord.Embed(
         title="🔒 Weryfikacja",
         description="Kliknij przycisk poniżej, aby otrzymać dostęp do serwera.",
