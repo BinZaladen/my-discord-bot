@@ -5,11 +5,10 @@ from discord.ui import View, Button
 
 intents = discord.Intents.default()
 intents.members = True
-intents.message_content = True  # jeśli korzystasz z komend
+intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Wpisz tutaj swoje ID kanału i roli
 CHANNEL_ID = 1373258480382771270
 ROLE_ID = 1373275307150278686
 
@@ -44,12 +43,9 @@ class VerificationView(View):
 @bot.event
 async def on_ready():
     print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
-    await send_verification_automatic()
-
-async def send_verification_automatic():
     channel = bot.get_channel(CHANNEL_ID)
     if channel is None:
-        print("Nie znaleziono kanału o podanym ID.")
+        print("Nie znaleziono kanału.")
         return
 
     # Usuwamy stare wiadomości bota na kanale
@@ -58,29 +54,7 @@ async def send_verification_automatic():
             await message.delete()
 
     view = VerificationView(ROLE_ID)
-    await channel.send(
-        "Kliknij przycisk poniżej, aby się zweryfikować.",
-        view=view
-    )
-    print("Wysłano wiadomość weryfikacyjną z przyciskiem.")
-
-@bot.command()
-async def send_verification(ctx):
-    """Manualne wysłanie wiadomości z przyciskiem na kanał."""
-    channel = bot.get_channel(CHANNEL_ID)
-    if channel is None:
-        await ctx.send("Nie znaleziono kanału weryfikacyjnego.")
-        return
-
-    async for message in channel.history(limit=100):
-        if message.author == bot.user:
-            await message.delete()
-
-    view = VerificationView(ROLE_ID)
-    await channel.send(
-        f"{ctx.author.mention}, kliknij przycisk poniżej, aby się zweryfikować.",
-        view=view
-    )
-    await ctx.send("Wiadomość weryfikacyjna została wysłana.")
+    await channel.send("Kliknij przycisk, aby się zweryfikować.", view=view)
+    print("Wiadomość weryfikacyjna wysłana.")
 
 bot.run(os.getenv("DISCORD_TOKEN"))
