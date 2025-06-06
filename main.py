@@ -326,7 +326,7 @@ async def ticket(ctx):
 
 # --- Uruchomienie ---
 
-token = os.getenv("TOKEN")
+token = os.getenv("DISCORD_TOKEN")
 if not token:
     print("❌ Nie znaleziono tokena bota. Ustaw zmienną środowiskową TOKEN.")
     exit(1)
