@@ -9,40 +9,37 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- KONFIGURACJA ---
-
+# ID kanałów i ról
 CHANNEL_VERIFICATION_ID = 1373258480382771270
 ROLE_VERIFIED_ID = 1373275307150278686
 
 CHANNEL_TICKET_ID = 1373305137228939416
 CATEGORY_TICKET_ID = 1373277957446959135
-CHANNEL_SUMMARY_ID = 1374479815914291240
+SUMMARY_CHANNEL_ID = 1374479815914291240
 
-# Role do zamykania ticketów
-CLOSER_ROLE_IDS = {1373275898375176232, 1379538984031752212}
+ROLES_CAN_CLOSE = [1373275898375176232, 1379538984031752212]
 
-# Przykładowa struktura serwer->tryby->itemy, łatwa do edycji:
-DATA = {
+# Konfiguracja dynamiczna
+TICKET_CONFIG = {
     "Serwer 1": {
-        "Tryb A": ["item1", "item2", "kasa"],
-        "Tryb B": ["item3", "item4", "kasa"],
+        "Tryb 1": ["Item1", "Item2", "Kasa"],
+        "Tryb 2": ["Item3", "Item4", "Kasa"]
     },
     "Serwer 2": {
-        "Tryb C": ["item5", "item6", "kasa"],
-        "Tryb D": ["item7", "item8", "kasa"],
+        "Tryb 1": ["ItemA", "ItemB", "Kasa"],
+        "Tryb 2": ["ItemC", "ItemD", "Kasa"]
     },
     "Serwer 3": {
-        "Tryb E": ["item9", "item10", "kasa"],
-        "Tryb F": ["item11", "item12", "kasa"],
+        "Tryb 1": ["ItemX", "ItemY", "Kasa"],
+        "Tryb 2": ["ItemZ", "ItemW", "Kasa"]
     },
     "Serwer 4": {
-        "Tryb G": ["item13", "item14", "kasa"],
-        "Tryb H": ["item15", "item16", "kasa"],
-    },
+        "Tryb 1": ["ItemQ", "ItemR", "Kasa"],
+        "Tryb 2": ["ItemS", "ItemT", "Kasa"]
+    }
 }
 
-# --- WERYFIKACJA ---
-
+# WERYFIKACJA
 class VerificationView(View):
     def __init__(self, role_id):
         super().__init__(timeout=None)
@@ -59,47 +56,112 @@ class VerificationView(View):
             await interaction.response.send_message("✅ Zostałeś zweryfikowany!", ephemeral=True)
         except discord.Forbidden:
             await interaction.followup.send("🚫 Bot nie ma uprawnień do nadania roli.", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send(f"❗ Wystąpił błąd: {e}", ephemeral=True)
 
-# --- MODALE DO ILOŚCI ---
+# TICKETY
+class TicketFlow(View):
+    def __init__(self, author: discord.Member):
+        super().__init__(timeout=300)
+        self.author = author
+        self.data = {
+            "typ": None,
+            "serwer": None,
+            "tryb": None,
+            "itemy": []
+        }
+        self.serwer_select = None
+        self.tryb_select = None
+        self.item_select = None
+        self.add_item(Select(placeholder="Wybierz: Sprzedajesz czy Kupujesz?", options=[
+            discord.SelectOption(label="Sprzedaj", value="sprzedaj"),
+            discord.SelectOption(label="Kup", value="kup")
+        ], custom_id="select_typ"))
 
-class AmountsModal(Modal):
-    def __init__(self, items, ticket_channel, user):
-        super().__init__(title="Podaj ilości dla wybranych itemów")
-        self.items = items
-        self.ticket_channel = ticket_channel
-        self.user = user
+    async def interaction_check(self, interaction):
+        return interaction.user.id == self.author.id
 
-        # Tworzymy TextInput dla każdego itemu
-        for item in items:
-            placeholder = "Podaj ilość"
-            if item == "kasa":
-                placeholder = "Podaj kwotę (np. 50k)"
-            self.add_item(TextInput(label=f"Ilość dla {item}", placeholder=placeholder, required=True, max_length=20))
+    @discord.ui.button(label="Zamknij ticket", style=discord.ButtonStyle.red, custom_id="close_ticket")
+    async def close_ticket(self, interaction: discord.Interaction, button: Button):
+        if any(role.id in ROLES_CAN_CLOSE for role in interaction.user.roles):
+            await interaction.channel.delete()
+        else:
+            await interaction.response.send_message("⛔ Nie masz uprawnień do zamknięcia tego ticketa.", ephemeral=True)
 
-    async def on_submit(self, interaction: discord.Interaction):
-        quantities = [child.value for child in self.children]
-        summary_lines = [f"**{item}**: {qty}" for item, qty in zip(self.items, quantities)]
+    async def on_select_option(self, interaction: discord.Interaction):
+        selected = interaction.data["values"][0]
+        self.data["typ"] = selected.capitalize()
+        self.clear_items()
 
-        # Wysyłamy podsumowanie na kanale ticketa
-        await self.ticket_channel.send(
-            f"📝 **Podsumowanie od {self.user.mention}:**\n" + "\n".join(summary_lines) +
-            "\n\n💬 Ktoś wkrótce odpowie na Twój ticket."
+        # Serwery
+        self.serwer_select = Select(placeholder="Wybierz serwer", options=[
+            discord.SelectOption(label=s) for s in TICKET_CONFIG.keys()
+        ], custom_id="select_serwer")
+        self.add_item(self.serwer_select)
+        await interaction.response.edit_message(content="🔄 Wybierz serwer:", view=self)
+
+    async def process_next(self, interaction: discord.Interaction):
+        cid = interaction.data["custom_id"]
+        value = interaction.data["values"][0]
+
+        if cid == "select_serwer":
+            self.data["serwer"] = value
+            self.clear_items()
+
+            self.tryb_select = Select(placeholder="Wybierz tryb", options=[
+                discord.SelectOption(label=t) for t in TICKET_CONFIG[value].keys()
+            ], custom_id="select_tryb")
+            self.add_item(self.tryb_select)
+            await interaction.response.edit_message(content="🔄 Wybierz tryb:", view=self)
+
+        elif cid == "select_tryb":
+            self.data["tryb"] = value
+            self.clear_items()
+
+            self.item_select = Select(placeholder="Wybierz itemy", options=[
+                discord.SelectOption(label=i) for i in TICKET_CONFIG[self.data["serwer"]][value]
+            ], custom_id="select_item", min_values=1, max_values=5)
+            self.add_item(self.item_select)
+            await interaction.response.edit_message(content="🔄 Wybierz itemy (max 5):", view=self)
+
+        elif cid == "select_item":
+            selected_items = interaction.data["values"]
+            self.data["itemy"] = []
+
+            modal = Modal(title="Wpisz ilości")
+            for i, item in enumerate(selected_items):
+                modal.add_item(TextInput(label=f"{item} - ilość", custom_id=f"item_{item}", required=True))
+            await interaction.response.send_modal(modal)
+
+    async def on_timeout(self):
+        try:
+            await self.message.edit(content="⏳ Czas na odpowiedź minął.", view=None)
+        except:
+            pass
+
+    async def on_modal_submit(self, interaction: discord.Interaction):
+        for k, v in interaction.data["components"][0].items():
+            label = k.replace("item_", "")
+            self.data["itemy"].append(f"{label} ({v})")
+
+        await self.send_summary(interaction)
+        await interaction.response.edit_message(content="✅ Podsumowanie wysłane!", view=None)
+
+    async def send_summary(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="📦 Nowy Ticket",
+            color=discord.Color.blurple()
         )
+        embed.add_field(name="Użytkownik", value=f"{self.author.mention}", inline=False)
+        embed.add_field(name="Typ transakcji", value=self.data["typ"], inline=True)
+        embed.add_field(name="Serwer", value=self.data["serwer"], inline=True)
+        embed.add_field(name="Tryb", value=self.data["tryb"], inline=True)
+        embed.add_field(name="Wybrane", value="\n".join(self.data["itemy"]), inline=False)
+        embed.set_footer(text="Czekaj na odpowiedź ze strony administracji.")
 
-        # Wysyłamy podsumowanie na kanał podsumowań
-        summary_channel = self.ticket_channel.guild.get_channel(CHANNEL_SUMMARY_ID)
+        await interaction.channel.send(embed=embed)
+
+        summary_channel = bot.get_channel(SUMMARY_CHANNEL_ID)
         if summary_channel:
-            await summary_channel.send(
-                f"🎫 **Nowe zgłoszenie od {self.user}**\n"
-                f"Kanał: {self.ticket_channel.mention}\n"
-                + "\n".join(summary_lines)
-            )
-
-        await interaction.response.send_message("✅ Podsumowanie wysłane.", ephemeral=True)
-
-# --- TICKETY z wyborami i modalem ---
+            await summary_channel.send(embed=embed)
 
 class TicketView(View):
     def __init__(self):
@@ -109,116 +171,24 @@ class TicketView(View):
     async def create_ticket(self, interaction: discord.Interaction, button: Button):
         guild = interaction.guild
         category = guild.get_channel(CATEGORY_TICKET_ID)
-        if category is None or not isinstance(category, discord.CategoryChannel):
-            await interaction.response.send_message("❌ Nie znaleziono kategorii ticketów.", ephemeral=True)
-            return
 
-        # Sprawdzamy czy ticket już istnieje
-        existing_channel = discord.utils.get(guild.channels, name=f"ticket-{interaction.user.id}")
-        if existing_channel:
-            await interaction.response.send_message(f"❗ Masz już otwarty ticket: {existing_channel.mention}", ephemeral=True)
+        existing = discord.utils.get(guild.channels, name=f"ticket-{interaction.user.id}")
+        if existing:
+            await interaction.response.send_message(f"Masz już ticket: {existing.mention}", ephemeral=True)
             return
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
         }
-
         ticket_channel = await guild.create_text_channel(
             name=f"ticket-{interaction.user.id}",
             category=category,
-            overwrites=overwrites,
-            reason=f"Ticket utworzony przez {interaction.user}"
+            overwrites=overwrites
         )
-
-        # Pierwsza wiadomość z wyborem Sprzedaj/Kup i przyciskiem zamknięcia
-        await ticket_channel.send(
-            f"Witaj {interaction.user.mention}! Wybierz, czy chcesz **Sprzedaj** czy **Kup**:",
-            view=SellBuyView(ticket_channel, interaction.user)
-        )
-
         await interaction.response.send_message(f"✅ Ticket utworzony: {ticket_channel.mention}", ephemeral=True)
-
-class SellBuyView(View):
-    def __init__(self, ticket_channel, user):
-        super().__init__(timeout=None)
-        self.ticket_channel = ticket_channel
-        self.user = user
-
-    @discord.ui.button(label="Sprzedaj", style=discord.ButtonStyle.red, custom_id="sell")
-    async def sell_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.edit_message(content="Wybierz serwer:", view=ServerSelectView("sprzedaj", self.ticket_channel, self.user))
-
-    @discord.ui.button(label="Kup", style=discord.ButtonStyle.green, custom_id="buy")
-    async def buy_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.edit_message(content="Wybierz serwer:", view=ServerSelectView("kup", self.ticket_channel, self.user))
-
-    @discord.ui.button(label="Zamknij ticket", style=discord.ButtonStyle.grey, custom_id="close_ticket")
-    async def close_button(self, interaction: discord.Interaction, button: Button):
-        if not any(role.id in CLOSER_ROLE_IDS for role in interaction.user.roles):
-            await interaction.response.send_message("🚫 Nie masz uprawnień do zamknięcia ticketu.", ephemeral=True)
-            return
-        await self.ticket_channel.delete()
-
-class ServerSelectView(View):
-    def __init__(self, action, ticket_channel, user):
-        super().__init__(timeout=None)
-        self.action = action  # 'sprzedaj' lub 'kup'
-        self.ticket_channel = ticket_channel
-        self.user = user
-
-        options = [discord.SelectOption(label=server) for server in DATA.keys()]
-        self.select = Select(placeholder="Wybierz serwer", options=options)
-        self.select.callback = self.server_chosen
-        self.add_item(self.select)
-
-    async def server_chosen(self, interaction: discord.Interaction):
-        server = self.select.values[0]
-        await interaction.response.edit_message(content=f"Wybrano serwer: **{server}**\nWybierz tryb:", view=ModeSelectView(self.action, self.ticket_channel, self.user, server))
-
-class ModeSelectView(View):
-    def __init__(self, action, ticket_channel, user, server):
-        super().__init__(timeout=None)
-        self.action = action
-        self.ticket_channel = ticket_channel
-        self.user = user
-        self.server = server
-
-        modes = DATA[server].keys()
-        options = [discord.SelectOption(label=mode) for mode in modes]
-        self.select = Select(placeholder="Wybierz tryb", options=options)
-        self.select.callback = self.mode_chosen
-        self.add_item(self.select)
-
-    async def mode_chosen(self, interaction: discord.Interaction):
-        mode = self.select.values[0]
-        items = DATA[self.server][mode]
-
-        # Przekazujemy do wyboru itemów
-        await interaction.response.edit_message(content=f"Wybrano tryb: **{mode}**\nWybierz itemy:", view=ItemSelectView(self.action, self.ticket_channel, self.user, self.server, mode, items))
-
-class ItemSelectView(View):
-    def __init__(self, action, ticket_channel, user, server, mode, items):
-        super().__init__(timeout=None)
-        self.action = action
-        self.ticket_channel = ticket_channel
-        self.user = user
-        self.server = server
-        self.mode = mode
-        self.items = items
-
-        options = [discord.SelectOption(label=item) for item in items]
-        self.select = Select(placeholder="Wybierz itemy (możesz wybrać wiele)", options=options, min_values=1, max_values=len(options))
-        self.select.callback = self.items_chosen
-        self.add_item(self.select)
-
-    async def items_chosen(self, interaction: discord.Interaction):
-        chosen_items = self.select.values
-        # Otwieramy modal do wpisania ilości
-        modal = AmountsModal(chosen_items, self.ticket_channel, self.user)
-        await interaction.response.send_modal(modal)
-
-# --- GŁÓWNA KLASA BOTA ---
+        view = TicketFlow(interaction.user)
+        view.message = await ticket_channel.send(f"{interaction.user.mention}, rozpocznij konfigurację:", view=view)
 
 @bot.event
 async def on_ready():
@@ -227,38 +197,20 @@ async def on_ready():
     bot.add_view(VerificationView(ROLE_VERIFIED_ID))
     bot.add_view(TicketView())
 
-    # Weryfikacja
     channel_ver = bot.get_channel(CHANNEL_VERIFICATION_ID)
     if channel_ver:
-        async for message in channel_ver.history(limit=100):
-            if message.author == bot.user:
-                await message.delete()
+        async for msg in channel_ver.history(limit=50):
+            if msg.author == bot.user:
+                await msg.delete()
+        embed = discord.Embed(title="🔒 Weryfikacja", description="Kliknij, aby uzyskać dostęp do serwera.", color=discord.Color.green())
+        await channel_ver.send(embed=embed, view=VerificationView(ROLE_VERIFIED_ID))
 
-        embed_ver = discord.Embed(
-            title="🔒 Weryfikacja",
-            description="Kliknij przycisk poniżej, aby otrzymać dostęp do serwera.",
-            color=discord.Color.green()
-        )
-        await channel_ver.send(embed=embed_ver, view=VerificationView(ROLE_VERIFIED_ID))
-        print("✅ Wysłano wiadomość weryfikacyjną (embed + przycisk).")
-    else:
-        print("❌ Nie znaleziono kanału weryfikacji.")
-
-    # Ticket
     channel_ticket = bot.get_channel(CHANNEL_TICKET_ID)
     if channel_ticket:
-        async for message in channel_ticket.history(limit=100):
-            if message.author == bot.user:
-                await message.delete()
-
-        embed_ticket = discord.Embed(
-            title="🎫 System Ticketów",
-            description="Kliknij przycisk poniżej, aby utworzyć ticket i otrzymać pomoc.",
-            color=discord.Color.blurple()
-        )
-        await channel_ticket.send(embed=embed_ticket, view=TicketView())
-        print("✅ Wysłano wiadomość ticketową (embed + przycisk).")
-    else:
-        print("❌ Nie znaleziono kanału ticketów.")
+        async for msg in channel_ticket.history(limit=50):
+            if msg.author == bot.user:
+                await msg.delete()
+        embed = discord.Embed(title="🎫 Ticket", description="Kliknij, aby utworzyć ticket.", color=discord.Color.blurple())
+        await channel_ticket.send(embed=embed, view=TicketView())
 
 bot.run(os.getenv("DISCORD_TOKEN"))
