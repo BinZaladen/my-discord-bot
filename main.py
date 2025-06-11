@@ -289,4 +289,7 @@ async def on_ready():
         view = TicketStartView()
         await channel_ticket_start.send("Utwórz ticket, klikając przycisk:", view=view)
 
-bot.run("TWÓJ_TOKEN_TUTAJ")
+import os
+token = os.getenv("DISCORD_TOKEN")
+bot.run(token)
+
