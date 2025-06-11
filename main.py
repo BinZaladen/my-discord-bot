@@ -9,16 +9,18 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# ID kanałów, kategorii i ról
+# --- KONFIGURACJA ---
+GUILD_ID = 123456789012345678  # Wpisz tutaj ID swojego serwera (int)
+
 CHANNEL_VERIFICATION_ID = 1373258480382771270
 ROLE_VERIFIED_ID = 1373275307150278686
 
-CHANNEL_TICKET_START_ID = 1373305137228939416  # kanał, gdzie jest przycisk "Utwórz ticket"
-CATEGORY_TICKET_ID = 1373277957446959135       # kategoria ticketów
+CHANNEL_TICKET_START_ID = 1373305137228939416
+CATEGORY_TICKET_ID = 1373277957446959135
 
 ROLE_TICKET_CLOSE = [1373275898375176232, 1379538984031752212]
 
-CHANNEL_SUMMARY_ID = 1374479815914291240        # kanał podsumowań
+CHANNEL_SUMMARY_ID = 1374479815914291240
 
 # --- Dane do wyborów ---
 DATA = {
@@ -67,7 +69,6 @@ class TicketStartView(View):
             await interaction.response.send_message("❌ Nie znaleziono kategorii ticketów.", ephemeral=True)
             return
 
-        # Sprawdź, czy użytkownik już ma otwarty ticket (kanał z nazwą ticket-<user_id>)
         existing_channel = discord.utils.get(guild.channels, name=f"ticket-{interaction.user.id}")
         if existing_channel:
             await interaction.response.send_message(f"❗ Masz już otwarty ticket: {existing_channel.mention}", ephemeral=True)
@@ -77,7 +78,6 @@ class TicketStartView(View):
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
         }
-        # Role do obsługi ticketów mają pełny dostęp
         for role_id in ROLE_TICKET_CLOSE:
             role = guild.get_role(role_id)
             if role:
@@ -92,7 +92,6 @@ class TicketStartView(View):
 
         await interaction.response.send_message(f"✅ Ticket utworzony: {ticket_channel.mention}", ephemeral=True)
 
-        # Wyślij menu startowe w kanale ticketu
         await ticket_channel.send(f"Witaj {interaction.user.mention}! Wybierz, czy chcesz coś sprzedać lub kupić.", view=SellBuySelectView(interaction.user))
 
 # --- Sell or Buy Select ---
@@ -121,7 +120,7 @@ class SellBuySelectView(View):
 # --- Server Select ---
 
 class ServerSelectView(View):
-    def __init__(self, user, action):  # action = sprzedaj/kup
+    def __init__(self, user, action):
         super().__init__(timeout=300)
         self.user = user
         self.action = action
@@ -184,7 +183,6 @@ class ItemSelectView(View):
 
         self.selected_items = {}  # item -> ilość (str)
 
-        # Opcje selecta to itemy z danego serwera i trybu + kasa
         items = DATA[server][mode]
         options = [discord.SelectOption(label=i) for i in items]
         self.select = discord.ui.Select(
@@ -195,7 +193,6 @@ class ItemSelectView(View):
         self.select.callback = self.item_select_callback
         self.add_item(self.select)
 
-        # Przycisk do zakończenia wyboru i pokazania podsumowania
         self.add_item(Button(label="Zakończ wybór", style=discord.ButtonStyle.green, custom_id="finish_selection", row=1))
 
     async def item_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
@@ -205,7 +202,6 @@ class ItemSelectView(View):
 
         item = select.values[0]
 
-        # Jeśli to kasa, poprosimy o kwotę, inaczej o ilość
         if item == "kasa":
             modal = AmountModal(self, item, is_money=True)
         else:
@@ -222,7 +218,6 @@ class ItemSelectView(View):
             await interaction.response.send_message("❗ Nie wybrałeś żadnych itemów.", ephemeral=True)
             return
 
-        # Tworzymy ładnego embeda z podsumowaniem
         embed = discord.Embed(title="Podsumowanie ticketa", color=discord.Color.blue())
         embed.add_field(name="Użytkownik", value=self.user.mention, inline=False)
         embed.add_field(name="Akcja", value=self.action.capitalize(), inline=True)
@@ -235,13 +230,13 @@ class ItemSelectView(View):
         embed.add_field(name="Wybrane itemy", value=items_text, inline=False)
         embed.set_footer(text="Ktoś wkrótce się odezwie.")
 
-        # Wysyłamy do kanału ticketa
         await interaction.response.edit_message(content=None, embed=embed, view=None)
 
-        # Wysyłamy podsumowanie do kanału podsumowań
         channel = self.user.guild.get_channel(CHANNEL_SUMMARY_ID)
         if channel:
             await channel.send(embed=embed)
+
+# --- Modal do ilości / kwoty ---
 
 class AmountModal(Modal):
     def __init__(self, item_select_view: ItemSelectView, item: str, is_money: bool):
@@ -268,28 +263,31 @@ class AmountModal(Modal):
         self.item_select_view.selected_items[self.item] = value
         await interaction.response.send_message(f"✅ Dodano {self.item}: {value}", ephemeral=True)
 
-        # Odśwież widok item select (żeby można było dodać kolejny item)
-        await interaction.message.edit(view=self.item_select_view)
-
 @bot.event
 async def on_ready():
     print(f"Zalogowano jako {bot.user}!")
 
-    guild = bot.get_guild(TWOJE_GUILD_ID)  # wpisz ID swojego serwera
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print(f"Nie znaleziono serwera o ID {GUILD_ID}")
+        return
 
-    # Wyślij wiadomość weryfikacyjną
     channel_verification = guild.get_channel(CHANNEL_VERIFICATION_ID)
     if channel_verification:
         view = VerificationView(ROLE_VERIFIED_ID)
         await channel_verification.send("Kliknij przycisk, aby się zweryfikować:", view=view)
+    else:
+        print(f"Nie znaleziono kanału weryfikacji o ID {CHANNEL_VERIFICATION_ID}")
 
-    # Wyślij wiadomość do utworzenia ticketu
     channel_ticket_start = guild.get_channel(CHANNEL_TICKET_START_ID)
     if channel_ticket_start:
         view = TicketStartView()
         await channel_ticket_start.send("Utwórz ticket, klikając przycisk:", view=view)
+    else:
+        print(f"Nie znaleziono kanału ticketów o ID {CHANNEL_TICKET_START_ID}")
 
-import os
 token = os.getenv("DISCORD_TOKEN")
-bot.run(token)
-
+if not token:
+    print("Błąd: Nie znaleziono zmiennej środowiskowej DISCORD_TOKEN!")
+else:
+    bot.run(token)
