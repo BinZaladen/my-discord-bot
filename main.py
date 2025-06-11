@@ -10,7 +10,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- KONFIGURACJA ---
-GUILD_ID = 123456789012345678  # Wpisz tutaj ID swojego serwera (int)
+GUILD_ID = 1373253103176122399  # Wpisz tutaj ID swojego serwera (int)
 
 CHANNEL_VERIFICATION_ID = 1373258480382771270
 ROLE_VERIFIED_ID = 1373275307150278686
