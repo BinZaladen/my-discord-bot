@@ -67,8 +67,17 @@ class TicketStartView(View):
             await interaction.response.send_message("❌ Nie znaleziono kategorii ticketów.", ephemeral=True)
             return
 
-        # Sprawdź, czy użytkownik już ma otwarty ticket (kanał z nazwą ticket-<user_id>)
-        existing_channel = discord.utils.get(guild.channels, name=f"ticket-{interaction.user.id}")
+        # Sprawdź, czy użytkownik już ma otwarty ticket (kanał z nazwą ticket-<user_id> w kategorii ticketów)
+        existing_channel = None
+        for channel in guild.channels:
+            if (
+                channel.name == f"ticket-{interaction.user.id}"
+                and isinstance(channel, discord.TextChannel)
+                and channel.category and channel.category.id == CATEGORY_TICKET_ID
+            ):
+                existing_channel = channel
+                break
+
         if existing_channel:
             await interaction.response.send_message(f"❗ Masz już otwarty ticket: {existing_channel.mention}", ephemeral=True)
             return
@@ -111,7 +120,7 @@ class SellBuySelectView(View):
         custom_id="sellbuy_select"
     )
     async def select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if interaction.user != self.user:
+        if interaction.user.id != self.user.id:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
@@ -138,7 +147,7 @@ class ServerSelectView(View):
         self.add_item(self.select)
 
     async def server_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if interaction.user != self.user:
+        if interaction.user.id != self.user.id:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
@@ -166,7 +175,7 @@ class ModeSelectView(View):
         self.add_item(self.select)
 
     async def mode_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if interaction.user != self.user:
+        if interaction.user.id != self.user.id:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
@@ -201,7 +210,7 @@ class ItemSelectView(View):
         self.add_item(Button(label="Zakończ wybór", style=discord.ButtonStyle.green, custom_id="finish_selection", row=1))
 
     async def item_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if interaction.user != self.user:
+        if interaction.user.id != self.user.id:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
@@ -217,7 +226,7 @@ class ItemSelectView(View):
 
     @discord.ui.button(label="Zakończ wybór", style=discord.ButtonStyle.green, custom_id="finish_selection")
     async def finish_selection_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.user:
+        if interaction.user.id != self.user.id:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
         if not self.selected_items:
@@ -227,106 +236,62 @@ class ItemSelectView(View):
         # Tworzymy ładnego embeda z podsumowaniem
         embed = discord.Embed(title="Podsumowanie ticketa", color=discord.Color.blue())
         embed.add_field(name="Użytkownik", value=self.user.mention, inline=False)
-        embed.add_field(name="Akcja", value=self.action.capitalize(), inline=True)
-        embed.add_field(name="Serwer", value=self.server, inline=True)
-        embed.add_field(name="Tryb", value=self.mode, inline=True)
+        embed.add_field(name="Akcja", value=self.action.capitalize(), inline=False)
+        embed.add_field(name="Serwer", value=self.server, inline=False)
+        embed.add_field(name="Tryb", value=self.mode, inline=False)
 
-        items_str = ""
-        for it, qty in self.selected_items.items():
-            items_str += f"- **{it}**: {qty}\n"
-        embed.add_field(name="Wybrane itemy", value=items_str, inline=False)
-        embed.set_footer(text="Ktoś wkrótce odpowie na Twojego ticketa.")
+        desc = ""
+        for item, amount in self.selected_items.items():
+            desc += f"**{item}**: {amount}\n"
 
-        await interaction.response.edit_message(content=None, embed=embed, view=None)
+        embed.add_field(name="Wybrane itemy", value=desc, inline=False)
+        embed.set_footer(text="Ticket System Bot")
 
-        # Wyślij też podsumowanie na kanał podsumowań
-        summary_channel = bot.get_channel(CHANNEL_SUMMARY_ID)
-        if summary_channel:
-            await summary_channel.send(embed=embed)
+        await interaction.response.send_message("✅ Podsumowanie utworzone. Przesłane na kanał podsumowań.", ephemeral=True)
 
-# --- Modal do wpisywania ilości / kwoty ---
+        # Wysyłamy embed na kanał podsumowań
+        channel = interaction.guild.get_channel(CHANNEL_SUMMARY_ID)
+        if channel:
+            await channel.send(embed=embed)
+        else:
+            await interaction.followup.send("❗ Nie znaleziono kanału podsumowań.", ephemeral=True)
+
+# --- Amount Modal ---
 
 class AmountModal(Modal):
-    def __init__(self, parent_view: ItemSelectView, item_name: str, is_money: bool):
-        super().__init__(title=f"Wpisz {'kwotę' if is_money else 'ilość'} dla: {item_name}")
-
+    def __init__(self, parent_view, item, is_money):
+        super().__init__(title=f"Ilość dla {item}", timeout=300)
         self.parent_view = parent_view
-        self.item_name = item_name
+        self.item = item
         self.is_money = is_money
 
-        self.amount_input = TextInput(label="Wpisz tutaj:", placeholder="Np. 50 lub 100k", required=True, max_length=20)
-        self.add_item(self.amount_input)
+        label = "Kwota" if is_money else "Ilość"
+        self.amount = TextInput(label=label, placeholder="Podaj liczbę", required=True)
+        self.add_item(self.amount)
 
     async def on_submit(self, interaction: discord.Interaction):
-        amount = self.amount_input.value.strip()
-        # Możesz tu dodać walidację ilości/kwoty
-
-        # Dopisz do wybranych itemów (jeśli jest już, to sumujemy lub nadpisujemy)
-        if self.item_name in self.parent_view.selected_items:
-            # Możesz wybrać czy sumować, albo nadpisywać — tu nadpisujemy
-            self.parent_view.selected_items[self.item_name] = amount
-        else:
-            self.parent_view.selected_items[self.item_name] = amount
-
-        await interaction.response.send_message(f"Dodano **{self.item_name}** z ilością/kwotą: **{amount}**", ephemeral=True)
-
-# --- Przycisk do zamknięcia ticketa ---
-
-class CloseTicketView(View):
-    def __init__(self, author_id):
-        super().__init__(timeout=None)
-        self.author_id = author_id
-
-    @discord.ui.button(label="Zamknij ticket", style=discord.ButtonStyle.red, custom_id="close_ticket_button")
-    async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Sprawdzamy czy użytkownik ma odpowiednią rolę
-        if not any(role.id in ROLE_TICKET_CLOSE for role in interaction.user.roles):
-            await interaction.response.send_message("❌ Nie masz uprawnień do zamknięcia tego ticketa.", ephemeral=True)
+        val = self.amount.value
+        if not val.isdigit():
+            await interaction.response.send_message("❌ Podaj poprawną liczbę.", ephemeral=True)
             return
 
-        channel = interaction.channel
-        await channel.delete(reason=f"Ticket zamknięty przez {interaction.user}")
+        self.parent_view.selected_items[self.item] = val
+        await interaction.response.send_message(f"✅ Dodano {self.item} - {val}.", ephemeral=True)
 
-@bot.event
-async def on_ready():
-    print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
+# --- Komenda do uruchomienia ticket start message ---
 
-    # Dodajemy widoki persistent (przyciski działają po restarcie bota)
-    bot.add_view(VerificationView(ROLE_VERIFIED_ID))
-    bot.add_view(TicketStartView())
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def ticketstart(ctx):
+    view = TicketStartView()
+    await ctx.send("Kliknij przycisk, aby utworzyć ticket.", view=view)
 
-    # Weryfikacja - automatycznie wysyłamy embed + przycisk na kanale weryfikacji
-    channel_ver = bot.get_channel(CHANNEL_VERIFICATION_ID)
-    if channel_ver:
-        async for message in channel_ver.history(limit=100):
-            if message.author == bot.user:
-                await message.delete()
+# --- Weryfikacja start (na kanale) ---
 
-        embed_ver = discord.Embed(
-            title="🔒 Weryfikacja",
-            description="Kliknij przycisk poniżej, aby otrzymać dostęp do serwera.",
-            color=discord.Color.green()
-        )
-        await channel_ver.send(embed=embed_ver, view=VerificationView(ROLE_VERIFIED_ID))
-        print("✅ Wysłano wiadomość weryfikacyjną (embed + przycisk).")
-    else:
-        print("❌ Nie znaleziono kanału weryfikacji.")
-
-    # Ticket start - wiadomość z przyciskiem do tworzenia ticketa
-    channel_ticket_start = bot.get_channel(CHANNEL_TICKET_START_ID)
-    if channel_ticket_start:
-        async for message in channel_ticket_start.history(limit=100):
-            if message.author == bot.user:
-                await message.delete()
-
-        embed_ticket_start = discord.Embed(
-            title="🎫 System Ticketów",
-            description="Kliknij przycisk poniżej, aby utworzyć ticket i otrzymać pomoc.",
-            color=discord.Color.blurple()
-        )
-        await channel_ticket_start.send(embed=embed_ticket_start, view=TicketStartView())
-        print("✅ Wysłano wiadomość ticketową (embed + przycisk).")
-    else:
-        print("❌ Nie znaleziono kanału ticketów.")
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def sendverify(ctx):
+    view = VerificationView(ROLE_VERIFIED_ID)
+    await ctx.send("Kliknij przycisk, aby się zweryfikować.", view=view)
 
 bot.run(os.getenv("DISCORD_TOKEN"))
