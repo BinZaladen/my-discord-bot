@@ -1,5 +1,6 @@
 import os
 import discord
+import random
 from discord.ext import commands
 from discord.ui import View, Button, Select, Modal, TextInput
 
@@ -39,17 +40,25 @@ class VerificationView(View):
 
     @discord.ui.button(label="Zweryfikuj się", style=discord.ButtonStyle.green, custom_id="verify_button")
     async def verify_button(self, interaction: discord.Interaction, button: Button):
-        role = discord.utils.get(interaction.guild.roles, id=self.role_id)
-        if not role:
-            await interaction.response.send_message("❌ Nie znaleziono roli.", ephemeral=True)
-            return
-        try:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message("✅ Zostałeś zweryfikowany!", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.followup.send("🚫 Bot nie ma uprawnień do nadania roli.", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send(f"❗ Wystąpił błąd: {e}", ephemeral=True)
+        a = random.randint(1, 10)
+        b = random.randint(1, 10)
+        correct_answer = str(a + b)
+
+        class VerificationModal(Modal, title="Weryfikacja matematyczna"):
+            answer = TextInput(label=f"Ile to jest {a} + {b}?", placeholder="Wpisz wynik...", required=True)
+
+            async def on_submit(self, modal_interaction: discord.Interaction):
+                if self.answer.value.strip() == correct_answer:
+                    role = discord.utils.get(modal_interaction.guild.roles, id=self.role_id)
+                    if not role:
+                        await modal_interaction.response.send_message("❌ Nie znaleziono roli.", ephemeral=True)
+                        return
+                    await modal_interaction.user.add_roles(role)
+                    await modal_interaction.response.send_message("✅ Zostałeś zweryfikowany!", ephemeral=True)
+                else:
+                    await modal_interaction.response.send_message("❌ Niepoprawna odpowiedź. Spróbuj ponownie.", ephemeral=True)
+
+        await interaction.response.send_modal(VerificationModal())
 
 # --- Ticket Start View ---
 class TicketStartView(View):
@@ -300,8 +309,11 @@ async def on_ready():
             if message.author == bot.user:
                 await message.delete()
         embed_ver = discord.Embed(
-            title="🔒 Weryfikacja",
-            description="Kliknij przycisk poniżej, aby otrzymać dostęp do serwera.",
+            title="🔐 Weryfikacja na 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏",
+            description=(
+                "Aby uzyskać dostęp do serwera, rozwiąż proste równanie matematyczne.\n"
+                "Kliknij przycisk poniżej, aby rozpocząć weryfikację."
+            ),
             color=discord.Color.green()
         )
         await channel_ver.send(embed=embed_ver, view=VerificationView(ROLE_VERIFIED_ID))
@@ -312,8 +324,8 @@ async def on_ready():
             if message.author == bot.user:
                 await message.delete()
         embed_ticket_start = discord.Embed(
-            title="🎫 System Ticketów",
-            description="Kliknij przycisk poniżej, aby utworzyć ticket i otrzymać pomoc.",
+            title="🎫 Centrum Pomocy 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏",
+            description="Kliknij przycisk poniżej, aby utworzyć ticket i kupić/sprzedać przedmioty w grze Minecraft.",
             color=discord.Color.blurple()
         )
         await channel_ticket_start.send(embed=embed_ticket_start, view=TicketStartView())
