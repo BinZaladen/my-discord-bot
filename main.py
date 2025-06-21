@@ -103,12 +103,12 @@ class SellBuySelectView(View):
         custom_id="sellbuy_select"
     )
     async def select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if self.user and interaction.user != self.user:
+        if interaction.user != self.user:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
         await interaction.response.defer()
-        view = ServerSelectView(interaction.user, select.values[0])
+        view = ServerSelectView(self.user, select.values[0])
         await interaction.message.edit(content=f"Wybrałeś: **{select.values[0].capitalize()}**. Teraz wybierz serwer.", view=view)
 
 # --- Server Select ---
@@ -128,12 +128,12 @@ class ServerSelectView(View):
         self.add_item(self.select)
 
     async def server_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if self.user and interaction.user != self.user:
+        if interaction.user != self.user:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
         server = select.values[0]
-        view = ModeSelectView(interaction.user, self.action, server)
+        view = ModeSelectView(self.user, self.action, server)
         await interaction.response.edit_message(content=f"Wybrałeś serwer: **{server}**. Teraz wybierz tryb.", view=view)
 
 # --- Mode Select ---
@@ -155,12 +155,12 @@ class ModeSelectView(View):
         self.add_item(self.select)
 
     async def mode_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if self.user and interaction.user != self.user:
+        if interaction.user != self.user:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
         mode = select.values[0]
-        view = ItemSelectView(interaction.user, self.action, self.server, mode)
+        view = ItemSelectView(self.user, self.action, self.server, mode)
         await interaction.response.edit_message(content=f"Wybrałeś tryb: **{mode}**. Teraz wybierz itemy.", view=view)
 
 # --- Item Select ---
@@ -174,7 +174,7 @@ class ItemSelectView(View):
 
         self.selected_items = {}
 
-        items = DATA[server][mode] if server and mode else []
+        items = DATA[server][mode]
         options = [discord.SelectOption(label=i) for i in items]
         self.select = discord.ui.Select(
             placeholder="Wybierz item do dodania",
@@ -185,7 +185,7 @@ class ItemSelectView(View):
         self.add_item(self.select)
 
     async def item_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if self.user and interaction.user != self.user:
+        if interaction.user != self.user:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
@@ -195,7 +195,7 @@ class ItemSelectView(View):
 
     @discord.ui.button(label="Zakończ wybór", style=discord.ButtonStyle.green, custom_id="finish_selection")
     async def finish_selection_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.user and interaction.user != self.user:
+        if interaction.user != self.user:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
         if not self.selected_items:
@@ -231,6 +231,8 @@ class AmountModal(Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         amount = self.amount_input.value.strip()
+
+        # Walidacja prosta
         try:
             _ = float(amount.replace("k", "000").lower().replace(" ", ""))
         except ValueError:
@@ -253,29 +255,13 @@ class CloseTicketView(View):
             return
         await interaction.channel.delete(reason=f"Ticket zamknięty przez {interaction.user}")
 
-# --- Globalny log błędów ---
-@bot.event
-async def on_error(event, *args, **kwargs):
-    import traceback
-    with open("error.log", "a") as f:
-        f.write(f"\nError in event {event}:\n")
-        traceback.print_exc(file=f)
-
 # --- on_ready ---
 @bot.event
 async def on_ready():
     print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
-
-    # Zarejestruj wszystkie persistent view
     bot.add_view(VerificationView(ROLE_VERIFIED_ID))
     bot.add_view(TicketStartView())
-    bot.add_view(SellBuySelectView(None))
-    bot.add_view(ServerSelectView(None, None))
-    bot.add_view(ModeSelectView(None, None, None))
-    bot.add_view(ItemSelectView(None, None, None, None))
-    bot.add_view(CloseTicketView(None))
 
-    # Weryfikacja
     channel_ver = bot.get_channel(CHANNEL_VERIFICATION_ID)
     if channel_ver:
         async for message in channel_ver.history(limit=100):
@@ -288,7 +274,6 @@ async def on_ready():
         )
         await channel_ver.send(embed=embed_ver, view=VerificationView(ROLE_VERIFIED_ID))
 
-    # Start ticketów
     channel_ticket_start = bot.get_channel(CHANNEL_TICKET_START_ID)
     if channel_ticket_start:
         async for message in channel_ticket_start.history(limit=100):
