@@ -120,29 +120,23 @@ class SellBuySelectView(View):
         await interaction.message.edit(content=f"Wybrałeś: **{self.select.values[0].capitalize()}**. Teraz wybierz serwer.", view=view)
 
 # --- Server Select ---
-class ServerSelectView(View):
-    def __init__(self, user, action):
-        super().__init__(timeout=300)
-        self.user = user
-        self.action = action
+select = discord.ui.Select(
+    placeholder="Wybierz serwer",
+    options=options,
+    custom_id="server_select"
+)
 
-        options = [discord.SelectOption(label=s) for s in DATA.keys()]
-        self.select = discord.ui.Select(
-            placeholder="Wybierz serwer",
-            options=options,
-            custom_id="server_select"
-        )
-        self.select.callback = self.server_select_callback
-        self.add_item(self.select)
+async def server_select_callback(interaction: discord.Interaction):
+    if interaction.user != self.user:
+        await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
+        return
 
-    async def server_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if interaction.user != self.user:
-            await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
-            return
+    server = select.values[0]
+    view = ModeSelectView(self.user, self.action, server)
+    await interaction.response.edit_message(content=f"Wybrałeś serwer: **{server}**. Teraz wybierz tryb.", view=view)
 
-        server = select.values[0]
-        view = ModeSelectView(self.user, self.action, server)
-        await interaction.response.edit_message(content=f"Wybrałeś serwer: **{server}**. Teraz wybierz tryb.", view=view)
+select.callback = server_select_callback
+self.add_item(select)
 
 # --- Mode Select ---
 class ModeSelectView(View):
