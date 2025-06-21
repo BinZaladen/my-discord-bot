@@ -13,7 +13,7 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- Ustaw ID serwera do rejestracji lokalnych komend slash ---
-GUILD_ID = 123456789012345678  # <-- wpisz tutaj ID swojego serwera
+GUILD_ID = 1373253103176122399  # <-- wpisz tutaj ID swojego serwera
 
 # ID kanałów, kategorii i ról
 CHANNEL_VERIFICATION_ID = 1373258480382771270
