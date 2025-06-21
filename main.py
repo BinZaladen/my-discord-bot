@@ -1,8 +1,16 @@
+import os
+import discord
+from discord.ext import commands
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+
 @bot.event
 async def on_ready():
     print(f"✅ Zalogowano jako {bot.user}")
 
-    # Funkcja pomocnicza do pobierania emoji lub tekstu zastępczego
     def get_emoji(name, fallback="❓"):
         emoji = bot.get_emoji({
             "Klata": 1374793644246306866,
@@ -77,3 +85,6 @@ async def on_ready():
         if channel:
             embed = discord.Embed(description=text, color=discord.Color.orange())
             await channel.send(embed=embed)
+
+# Uruchom bota (upewnij się, że masz DISCORD_TOKEN ustawiony w środowisku)
+bot.run(os.getenv("DISCORD_TOKEN"))
