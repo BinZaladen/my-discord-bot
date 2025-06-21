@@ -7,11 +7,15 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+GUILD_ID = 1373258480382771270  # Podmień na swoje ID serwera
 TICKET_CHANNEL_ID = 1373305137228939416
 
 @bot.event
 async def on_ready():
     print(f"✅ Zalogowano jako {bot.user}")
+
+    guild = bot.get_guild(GUILD_ID)
+    logo_url = guild.icon.url if guild and guild.icon else None
 
     def get_emoji(name, fallback="❓"):
         emoji = bot.get_emoji({
@@ -38,7 +42,7 @@ async def on_ready():
             self.add_item(discord.ui.Button(
                 label="🎟️ Kup teraz",
                 style=discord.ButtonStyle.link,
-                url=f"https://discord.com/channels/{bot.guilds[0].id}/{TICKET_CHANNEL_ID}"
+                url=f"https://discord.com/channels/{guild.id}/{TICKET_CHANNEL_ID}"
             ))
 
     messages = [
@@ -100,12 +104,15 @@ async def on_ready():
         if not channel:
             continue
 
-        # Usuwamy poprzednie wiadomości bota
+        # Usuwamy stare wiadomości od bota
         async for msg in channel.history(limit=20):
             if msg.author == bot.user:
                 await msg.delete()
 
         embed = discord.Embed(description=text, color=discord.Color.blue())
+        if logo_url:
+            embed.set_thumbnail(url=logo_url)
+
         await channel.send(embed=embed, view=TicketRedirectButton())
 
 bot.run(os.getenv("DISCORD_TOKEN"))
