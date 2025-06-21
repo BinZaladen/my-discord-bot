@@ -12,6 +12,9 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# --- Ustaw ID serwera do rejestracji lokalnych komend slash ---
+GUILD_ID = 123456789012345678  # <-- wpisz tutaj ID swojego serwera
+
 # ID kanałów, kategorii i ról
 CHANNEL_VERIFICATION_ID = 1373258480382771270
 ROLE_VERIFIED_ID = 1373275307150278686
@@ -312,7 +315,7 @@ class CloseTicketView(View):
 
 
 
-# --- Slash command wyslij ---
+# --- Slash command wyslij (lokalna, z wyborem kanału) ---
 class WyslijModal(Modal, title="Wyślij wiadomość na kanał w embedzie"):
     def __init__(self, channel_id: int):
         super().__init__()
@@ -335,15 +338,10 @@ class WyslijModal(Modal, title="Wyślij wiadomość na kanał w embedzie"):
         await channel.send(embed=embed)
         await interaction.response.send_message(f"✅ Wiadomość została wysłana na {channel.mention}.", ephemeral=True)
 
-@bot.tree.command(name="wyslij", description="Wyślij embedowaną wiadomość na kanał")
-@app_commands.describe(channel_id="ID kanału, na który chcesz wysłać wiadomość")
-async def wyslij(interaction: discord.Interaction, channel_id: str):
-    try:
-        cid = int(channel_id)
-    except:
-        await interaction.response.send_message("❌ Niepoprawne ID kanału.", ephemeral=True)
-        return
-    modal = WyslijModal(cid)
+@bot.tree.command(name="wyslij", description="Wyślij embedowaną wiadomość na kanał", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(channel="Wybierz kanał, na który chcesz wysłać wiadomość")
+async def wyslij(interaction: discord.Interaction, channel: discord.TextChannel):
+    modal = WyslijModal(channel.id)
     await interaction.response.send_modal(modal)
 
 
@@ -353,12 +351,14 @@ async def on_ready():
     print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
     bot.add_view(VerificationView(ROLE_VERIFIED_ID))
     bot.add_view(TicketStartView())
-    # Sync commands
-    try:
-        await bot.tree.sync()
-        print("Slash commands synced.")
-    except Exception as e:
-        print(f"Nie udało się zsynchronizować slash commands: {e}")
+
+    guild = bot.get_guild(GUILD_ID)
+    if guild:
+        try:
+            await bot.tree.sync(guild=guild)
+            print("Slash commands synced for guild.")
+        except Exception as e:
+            print(f"Nie udało się zsynchronizować slash commands: {e}")
 
     channel_ver = bot.get_channel(CHANNEL_VERIFICATION_ID)
     if channel_ver:
