@@ -7,7 +7,7 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-GUILD_ID = 1373258480382771270  # Podmień na swoje ID serwera
+GUILD_ID = 1373253103176122399  # Podmień na swoje ID serwera
 TICKET_CHANNEL_ID = 1373305137228939416
 
 @bot.event
