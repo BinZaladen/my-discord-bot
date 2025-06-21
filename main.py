@@ -32,9 +32,19 @@ async def on_ready():
         }.get(name, 0))
         return str(emoji) if emoji else fallback
 
-    # Teksty z pogrubieniem
+    class TicketRedirectButton(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=None)
+            self.add_item(discord.ui.Button(
+                label="🎟️ Kup teraz",
+                style=discord.ButtonStyle.link,
+                url=f"https://discord.com/channels/{bot.guilds[0].id}/{TICKET_CHANNEL_ID}"
+            ))
+
+    # Lista wiadomości (kanał_id, treść)
     messages = [
         (1373266589310517338, f"""🛒 **Oferta itemów na sprzedaż**
+
 {get_emoji("Elytra")} **Elytra** — 12zł
 {get_emoji("Buty")} **Buty flasha** — 5zł
 {get_emoji("Miecz")} **Miecz 6** — 3zł
@@ -42,56 +52,64 @@ async def on_ready():
 {get_emoji("Shulker")} **Shulker totemów** — 6zł"""),
 
         (1373267159576481842, f"""🛒 **Oferta itemów na sprzedaż**
+
 {get_emoji("Klata")} **Set 25** — 30zł
 {get_emoji("Miecz")} **Miecz 25** — 25zł
 {get_emoji("Kilof")} **Kilof 25** — 10zł
 💸 **1mln$** — 18zł"""),
 
         (1373268875407396914, f"""🛒 **Oferta itemów na sprzedaż**
+
 💵 **4,5k$** — 1zł
 💸 **50k$** — 12zł
 💸 **550k$** — 130zł
 {get_emoji("ANA2")} **Anarchiczny set 2** — 28zł
 {get_emoji("Klata")} **Anarchiczny set 1** — 9zł
 
-⚔️ **Miecze:**
-{get_emoji("Miecz")} **Anarchiczny miecz** — 3zł
-
 🎉 **Eventówki:**
+
+{get_emoji("Miecz")} **Anarchiczny miecz** — 3zł  
 {get_emoji("MieczZajeczy")} **Zajęczy miecz** — 65zł  
 {get_emoji("Totem")} **Totem ułaskawienia** — 630zł  
 {get_emoji("Excalibur")} **Excalibur** — 370zł"""),
 
         (1373270295556788285, f"""🛒 **Oferta itemów na sprzedaż**
+
 💵 **50k$** — 1zł  
 💸 **1mln$** — 33zł
 
 🎉 **Eventówki:**
+
 {get_emoji("Excalibur")} **Excalibur** — 111zł  
 {get_emoji("Totem")} **Totem ułaskawienia** — 270zł  
 {get_emoji("Sakiewka")} **Sakiewka** — 50zł"""),
 
         (1373273108093337640, f"""🛒 **Oferta itemów na sprzedaż**
+
 💸 **10mld$** — 2zł  
 {get_emoji("Miecz")} **Miecz 35** — 65zł  
 {get_emoji("Klata")} **Set 35** — 90zł"""),
 
         (1374380939970347019, f"""🛒 **Oferta itemów na sprzedaż**
+
 💵 **15k$** — 1zł  
 {get_emoji("Buda")} **Buda** — 30zł  
 {get_emoji("LoveSwap")} **Love swap** — 100zł  
 {get_emoji("KlataMeduzy")} **Klata meduzy** — 140zł"""),
     ]
 
-    class TicketRedirectButton(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=None)
-            self.add_item(discord.ui.Button(label="🎟️ Kup teraz", style=discord.ButtonStyle.link, url=f"https://discord.com/channels/{bot.guilds[0].id}/{TICKET_CHANNEL_ID}"))
-
     for channel_id, text in messages:
         channel = bot.get_channel(channel_id)
-        if channel:
-            embed = discord.Embed(description=text, color=discord.Color.blue())
-            await channel.send(embed=embed, view=TicketRedirectButton())
+        if not channel:
+            continue
+
+        # Usuń poprzednie wiadomości bota
+        async for msg in channel.history(limit=20):
+            if msg.author == bot.user:
+                await msg.delete()
+
+        # Wyślij nowy embed z przyciskiem
+        embed = discord.Embed(description=text, color=discord.Color.blue())
+        await channel.send(embed=embed, view=TicketRedirectButton())
 
 bot.run(os.getenv("DISCORD_TOKEN"))
