@@ -1,8 +1,10 @@
 import os
-import random
 import discord
 from discord.ext import commands
+from discord import app_commands
 from discord.ui import View, Button, Select, Modal, TextInput
+import asyncio
+import random
 
 intents = discord.Intents.default()
 intents.members = True
@@ -32,50 +34,46 @@ DATA = {
     }
 }
 
-# --- Modal do rozwiązania równania ---
-class VerificationModal(Modal):
-    def __init__(self, role_id):
-        super().__init__(title="Weryfikacja — rozwiąż równanie")
-        self.role_id = role_id
-        self.a = random.randint(1, 10)
-        self.b = random.randint(1, 10)
-        self.answer = self.a + self.b
-
-        self.answer_input = TextInput(
-            label=f"Ile to {self.a} + {self.b}?",
-            placeholder="Wpisz wynik",
-            max_length=3,
-            required=True
-        )
-        self.add_item(self.answer_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        user_answer = self.answer_input.value.strip()
-        try:
-            if int(user_answer) == self.answer:
-                role = discord.utils.get(interaction.guild.roles, id=self.role_id)
-                if not role:
-                    await interaction.response.send_message("❌ Nie znaleziono roli do weryfikacji.", ephemeral=True)
-                    return
-                await interaction.user.add_roles(role)
-                await interaction.response.send_message("✅ Poprawnie rozwiązane! Otrzymałeś dostęp.", ephemeral=True)
-            else:
-                await interaction.response.send_message("❌ Niepoprawna odpowiedź. Spróbuj ponownie.", ephemeral=True)
-        except ValueError:
-            await interaction.response.send_message("❌ Podaj prawidłową liczbę.", ephemeral=True)
-
-
 # --- WERYFIKACJA ---
 class VerificationView(View):
     def __init__(self, role_id):
         super().__init__(timeout=None)
         self.role_id = role_id
+        self.current_answer = None
+        self.question = None
+        self.generate_question()
+
+    def generate_question(self):
+        a = random.randint(1, 10)
+        b = random.randint(1, 10)
+        self.question = f"{a} + {b} = ?"
+        self.current_answer = str(a + b)
 
     @discord.ui.button(label="Zweryfikuj się", style=discord.ButtonStyle.green, custom_id="verify_button")
     async def verify_button(self, interaction: discord.Interaction, button: Button):
-        modal = VerificationModal(self.role_id)
-        await interaction.response.send_modal(modal)
+        # Wyślij pytanie i poproś o odpowiedź
+        await interaction.response.send_modal(VerificationModal(self, self.question))
 
+class VerificationModal(Modal):
+    def __init__(self, parent_view: VerificationView, question: str):
+        super().__init__(title="Weryfikacja - rozwiąż zadanie")
+        self.parent_view = parent_view
+        self.answer_input = TextInput(label=question, placeholder="Wpisz odpowiedź", max_length=5)
+        self.add_item(self.answer_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if self.answer_input.value.strip() == self.parent_view.current_answer:
+            role = discord.utils.get(interaction.guild.roles, id=self.parent_view.role_id)
+            if role:
+                try:
+                    await interaction.user.add_roles(role)
+                    await interaction.response.send_message("✅ Zostałeś zweryfikowany!", ephemeral=True)
+                except discord.Forbidden:
+                    await interaction.response.send_message("🚫 Bot nie ma uprawnień do nadania roli.", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ Nie znaleziono roli weryfikacji.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Niepoprawna odpowiedź, spróbuj ponownie.", ephemeral=True)
 
 # --- Ticket Start View ---
 class TicketStartView(View):
@@ -114,7 +112,6 @@ class TicketStartView(View):
         await interaction.response.send_message(f"✅ Ticket utworzony: {ticket_channel.mention}", ephemeral=True)
         await ticket_channel.send(f"Witaj {interaction.user.mention}! Wybierz, czy chcesz coś sprzedać lub kupić.", view=SellBuySelectView(interaction.user))
 
-
 # --- Sell or Buy Select ---
 class SellBuySelectView(View):
     def __init__(self, user):
@@ -142,7 +139,6 @@ class SellBuySelectView(View):
         select.callback = callback
         self.add_item(select)
 
-
 # --- Server Select ---
 class ServerSelectView(View):
     def __init__(self, user, action):
@@ -168,7 +164,6 @@ class ServerSelectView(View):
 
         select.callback = callback
         self.add_item(select)
-
 
 # --- Mode Select ---
 class ModeSelectView(View):
@@ -196,7 +191,6 @@ class ModeSelectView(View):
 
         select.callback = callback
         self.add_item(select)
-
 
 # --- Item Select ---
 class ItemSelectView(View):
@@ -317,12 +311,54 @@ class CloseTicketView(View):
         await interaction.channel.delete(reason=f"Ticket zamknięty przez {interaction.user}")
 
 
+
+# --- Slash command wyslij ---
+class WyslijModal(Modal, title="Wyślij wiadomość na kanał w embedzie"):
+    def __init__(self, channel_id: int):
+        super().__init__()
+        self.channel_id = channel_id
+        self.message_input = TextInput(
+            label="Treść wiadomości",
+            style=discord.TextStyle.paragraph,
+            placeholder="Wpisz treść wiadomości do wysłania",
+            required=True,
+            max_length=2000
+        )
+        self.add_item(self.message_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        channel = bot.get_channel(self.channel_id)
+        if not channel:
+            await interaction.response.send_message("❌ Nie znalazłem kanału o podanym ID.", ephemeral=True)
+            return
+        embed = discord.Embed(description=self.message_input.value, color=discord.Color.blue())
+        await channel.send(embed=embed)
+        await interaction.response.send_message(f"✅ Wiadomość została wysłana na {channel.mention}.", ephemeral=True)
+
+@bot.tree.command(name="wyslij", description="Wyślij embedowaną wiadomość na kanał")
+@app_commands.describe(channel_id="ID kanału, na który chcesz wysłać wiadomość")
+async def wyslij(interaction: discord.Interaction, channel_id: str):
+    try:
+        cid = int(channel_id)
+    except:
+        await interaction.response.send_message("❌ Niepoprawne ID kanału.", ephemeral=True)
+        return
+    modal = WyslijModal(cid)
+    await interaction.response.send_modal(modal)
+
+
 # --- on_ready ---
 @bot.event
 async def on_ready():
     print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
     bot.add_view(VerificationView(ROLE_VERIFIED_ID))
     bot.add_view(TicketStartView())
+    # Sync commands
+    try:
+        await bot.tree.sync()
+        print("Slash commands synced.")
+    except Exception as e:
+        print(f"Nie udało się zsynchronizować slash commands: {e}")
 
     channel_ver = bot.get_channel(CHANNEL_VERIFICATION_ID)
     if channel_ver:
@@ -330,8 +366,8 @@ async def on_ready():
             if message.author == bot.user:
                 await message.delete()
         embed_ver = discord.Embed(
-            title="🔒 Weryfikacja",
-            description="Kliknij przycisk poniżej, aby otrzymać dostęp do serwera 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏.",
+            title="🔒 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏 - Weryfikacja",
+            description="Kliknij przycisk poniżej i rozwiąż proste zadanie matematyczne, aby uzyskać dostęp do serwera.",
             color=discord.Color.green()
         )
         await channel_ver.send(embed=embed_ver, view=VerificationView(ROLE_VERIFIED_ID))
@@ -342,12 +378,11 @@ async def on_ready():
             if message.author == bot.user:
                 await message.delete()
         embed_ticket_start = discord.Embed(
-            title="🎫 System Kupna i Sprzedaży",
-            description="Kliknij przycisk poniżej, aby utworzyć ticket i kupić lub sprzedać przedmioty na serwerze 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏.",
+            title="🎫 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏 - Ticket system",
+            description="Kliknij przycisk poniżej, aby utworzyć ticket na kupno lub sprzedaż przedmiotów.",
             color=discord.Color.blurple()
         )
         await channel_ticket_start.send(embed=embed_ticket_start, view=TicketStartView())
-
 
 # --- RUN ---
 bot.run(os.getenv("DISCORD_TOKEN"))
