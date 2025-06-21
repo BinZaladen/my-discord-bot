@@ -1,4 +1,5 @@
 import os
+import random
 import discord
 from discord.ext import commands
 from discord.ui import View, Button, Select, Modal, TextInput
@@ -31,6 +32,39 @@ DATA = {
     }
 }
 
+# --- Modal do rozwiązania równania ---
+class VerificationModal(Modal):
+    def __init__(self, role_id):
+        super().__init__(title="Weryfikacja — rozwiąż równanie")
+        self.role_id = role_id
+        self.a = random.randint(1, 10)
+        self.b = random.randint(1, 10)
+        self.answer = self.a + self.b
+
+        self.answer_input = TextInput(
+            label=f"Ile to {self.a} + {self.b}?",
+            placeholder="Wpisz wynik",
+            max_length=3,
+            required=True
+        )
+        self.add_item(self.answer_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user_answer = self.answer_input.value.strip()
+        try:
+            if int(user_answer) == self.answer:
+                role = discord.utils.get(interaction.guild.roles, id=self.role_id)
+                if not role:
+                    await interaction.response.send_message("❌ Nie znaleziono roli do weryfikacji.", ephemeral=True)
+                    return
+                await interaction.user.add_roles(role)
+                await interaction.response.send_message("✅ Poprawnie rozwiązane! Otrzymałeś dostęp.", ephemeral=True)
+            else:
+                await interaction.response.send_message("❌ Niepoprawna odpowiedź. Spróbuj ponownie.", ephemeral=True)
+        except ValueError:
+            await interaction.response.send_message("❌ Podaj prawidłową liczbę.", ephemeral=True)
+
+
 # --- WERYFIKACJA ---
 class VerificationView(View):
     def __init__(self, role_id):
@@ -39,17 +73,9 @@ class VerificationView(View):
 
     @discord.ui.button(label="Zweryfikuj się", style=discord.ButtonStyle.green, custom_id="verify_button")
     async def verify_button(self, interaction: discord.Interaction, button: Button):
-        role = discord.utils.get(interaction.guild.roles, id=self.role_id)
-        if not role:
-            await interaction.response.send_message("❌ Nie znaleziono roli.", ephemeral=True)
-            return
-        try:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message("✅ Zostałeś zweryfikowany!", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.followup.send("🚫 Bot nie ma uprawnień do nadania roli.", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send(f"❗ Wystąpił błąd: {e}", ephemeral=True)
+        modal = VerificationModal(self.role_id)
+        await interaction.response.send_modal(modal)
+
 
 # --- Ticket Start View ---
 class TicketStartView(View):
@@ -88,6 +114,7 @@ class TicketStartView(View):
         await interaction.response.send_message(f"✅ Ticket utworzony: {ticket_channel.mention}", ephemeral=True)
         await ticket_channel.send(f"Witaj {interaction.user.mention}! Wybierz, czy chcesz coś sprzedać lub kupić.", view=SellBuySelectView(interaction.user))
 
+
 # --- Sell or Buy Select ---
 class SellBuySelectView(View):
     def __init__(self, user):
@@ -115,6 +142,7 @@ class SellBuySelectView(View):
         select.callback = callback
         self.add_item(select)
 
+
 # --- Server Select ---
 class ServerSelectView(View):
     def __init__(self, user, action):
@@ -140,6 +168,7 @@ class ServerSelectView(View):
 
         select.callback = callback
         self.add_item(select)
+
 
 # --- Mode Select ---
 class ModeSelectView(View):
@@ -167,6 +196,7 @@ class ModeSelectView(View):
 
         select.callback = callback
         self.add_item(select)
+
 
 # --- Item Select ---
 class ItemSelectView(View):
@@ -317,6 +347,7 @@ async def on_ready():
             color=discord.Color.blurple()
         )
         await channel_ticket_start.send(embed=embed_ticket_start, view=TicketStartView())
+
 
 # --- RUN ---
 bot.run(os.getenv("DISCORD_TOKEN"))
