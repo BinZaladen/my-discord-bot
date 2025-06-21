@@ -94,22 +94,30 @@ class SellBuySelectView(View):
         super().__init__(timeout=300)
         self.user = user
 
-    @discord.ui.select(
-        placeholder="Wybierz Sprzedaj lub Kup",
-        options=[
-            discord.SelectOption(label="Sprzedaj", description="Sprzedaj coś", value="sprzedaj"),
-            discord.SelectOption(label="Kup", description="Kup coś", value="kup")
-        ],
-        custom_id="sellbuy_select"
-    )
-    async def select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
+class SellBuySelectView(View):
+    def __init__(self, user):
+        super().__init__(timeout=300)
+        self.user = user
+
+        self.select = discord.ui.Select(
+            placeholder="Wybierz Sprzedaj lub Kup",
+            options=[
+                discord.SelectOption(label="Sprzedaj", description="Sprzedaj coś", value="sprzedaj"),
+                discord.SelectOption(label="Kup", description="Kup coś", value="kup")
+            ],
+            custom_id="sellbuy_select"
+        )
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
+
+    async def select_callback(self, interaction: discord.Interaction):
         if interaction.user != self.user:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
         await interaction.response.defer()
-        view = ServerSelectView(self.user, select.values[0])
-        await interaction.message.edit(content=f"Wybrałeś: **{select.values[0].capitalize()}**. Teraz wybierz serwer.", view=view)
+        view = ServerSelectView(self.user, self.select.values[0])
+        await interaction.message.edit(content=f"Wybrałeś: **{self.select.values[0].capitalize()}**. Teraz wybierz serwer.", view=view)
 
 # --- Server Select ---
 class ServerSelectView(View):
