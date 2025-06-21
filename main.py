@@ -150,10 +150,9 @@ class ModeSelectView(View):
         self.server = server
 
         modes = DATA[server].keys()
-        options = [discord.SelectOption(label=m) for m in modes]
         select = discord.ui.Select(
             placeholder="Wybierz tryb",
-            options=options,
+            options=[discord.SelectOption(label=m) for m in modes],
             custom_id="mode_select"
         )
 
@@ -178,33 +177,34 @@ class ItemSelectView(View):
         self.server = server
         self.mode = mode
 
-        self.selected_items = {}
+        self.selected_items = {}  # {item_name: amount}
 
-        items = DATA[server][mode]
-        options = [discord.SelectOption(label=i) for i in items]
-        select = discord.ui.Select(
+        self.select = discord.ui.Select(
             placeholder="Wybierz item do dodania",
-            options=options,
+            options=[discord.SelectOption(label=i) for i in DATA[server][mode]],
             custom_id="item_select"
         )
+        self.select.callback = self.item_select_callback
+        self.add_item(self.select)
 
-        async def callback(interaction: discord.Interaction):
-            if interaction.user != self.user:
-                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
-                return
+        self.finish_button = Button(label="Zakończ wybór", style=discord.ButtonStyle.green, custom_id="finish_selection")
+        self.finish_button.callback = self.finish_selection_callback
+        self.add_item(self.finish_button)
 
-            item = interaction.data['values'][0]
-            modal = AmountModal(self, item, is_money=(item == "kasa"))
-            await interaction.response.send_modal(modal)
-
-        select.callback = callback
-        self.add_item(select)
-
-    @discord.ui.button(label="Zakończ wybór", style=discord.ButtonStyle.green, custom_id="finish_selection")
-    async def finish_selection_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def item_select_callback(self, interaction: discord.Interaction):
         if interaction.user != self.user:
             await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
+
+        item = interaction.data['values'][0]
+        modal = AmountModal(self, item, is_money=(item == "kasa"))
+        await interaction.response.send_modal(modal)
+
+    async def finish_selection_callback(self, interaction: discord.Interaction):
+        if interaction.user != self.user:
+            await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
+            return
+
         if not self.selected_items:
             await interaction.response.send_message("❗ Nie wybrałeś żadnych itemów.", ephemeral=True)
             return
@@ -227,25 +227,51 @@ class ItemSelectView(View):
 
         await interaction.followup.send("✅ Jeśli wszystko się zgadza, możesz zamknąć ticketa:", view=CloseTicketView(self.user.id))
 
-# --- Modal ---
+
 class AmountModal(Modal):
     def __init__(self, parent_view: ItemSelectView, item_name: str, is_money: bool):
         super().__init__(title=f"Wpisz {'kwotę' if is_money else 'ilość'} dla: {item_name}")
         self.parent_view = parent_view
         self.item_name = item_name
-        self.amount_input = TextInput(label="Wpisz tutaj:", placeholder="Np. 50 lub 100k", required=True, max_length=20)
+        self.is_money = is_money
+        self.amount_input = TextInput(
+            label="Wpisz tutaj:",
+            placeholder="Np. 100k" if is_money else "Np. 5",
+            required=True,
+            max_length=20
+        )
         self.add_item(self.amount_input)
 
     async def on_submit(self, interaction: discord.Interaction):
-        amount = self.amount_input.value.strip()
+        amount_raw = self.amount_input.value.strip()
+
         try:
-            _ = float(amount.replace("k", "000").lower().replace(" ", ""))
+            amount_num = float(amount_raw.lower().replace("k", "000").replace(" ", ""))
         except ValueError:
             await interaction.response.send_message("❌ Podano niepoprawną liczbę.", ephemeral=True)
             return
 
-        self.parent_view.selected_items[self.item_name] = amount
-        await interaction.response.send_message(f"Dodano **{self.item_name}** z wartością: **{amount}**", ephemeral=True)
+        # Dodaj lub sumuj
+        if self.item_name in self.parent_view.selected_items:
+            prev = self.parent_view.selected_items[self.item_name]
+            try:
+                prev_num = float(str(prev).lower().replace("k", "000").replace(" ", ""))
+                total = prev_num + amount_num
+                self.parent_view.selected_items[self.item_name] = str(total)
+            except:
+                self.parent_view.selected_items[self.item_name] = amount_raw
+        else:
+            self.parent_view.selected_items[self.item_name] = amount_raw
+
+        await interaction.response.send_message(
+            f"Dodano **{self.item_name}** z wartością: **{amount_raw}**.\n\n"
+            "Możesz wybrać kolejny item lub zakończyć wybór.",
+            ephemeral=True
+        )
+
+        # Po modalu wróć do wyboru itemów
+        await interaction.message.edit(view=self.parent_view)
+
 
 # --- Close Ticket ---
 class CloseTicketView(View):
@@ -259,6 +285,7 @@ class CloseTicketView(View):
             await interaction.response.send_message("❌ Nie masz uprawnień do zamknięcia tego ticketa.", ephemeral=True)
             return
         await interaction.channel.delete(reason=f"Ticket zamknięty przez {interaction.user}")
+
 
 # --- on_ready ---
 @bot.event
