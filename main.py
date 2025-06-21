@@ -26,6 +26,8 @@ ROLE_TICKET_CLOSE = [1373275898375176232, 1379538984031752212]
 
 CHANNEL_SUMMARY_ID = 1374479815914291240
 
+ROLE_CUSTOMER_ID = 1374099985288921088  # Rola 'customer' do nadania po realizacji
+
 DATA = {
     "Serwer 1": {
         "Tryb A": ["item1", "item2", "kasa"],
@@ -250,7 +252,9 @@ class ItemSelectView(View):
 
         summary_channel = bot.get_channel(CHANNEL_SUMMARY_ID)
         if summary_channel:
-            await summary_channel.send(embed=embed)
+            member = interaction.guild.get_member(self.user.id)
+            view = RealizeOrderView(member)
+            await summary_channel.send(embed=embed, view=view)
 
         await interaction.followup.send("✅ Jeśli wszystko się zgadza, możesz zamknąć ticketa:", view=CloseTicketView(self.user.id))
 
@@ -313,6 +317,25 @@ class CloseTicketView(View):
             return
         await interaction.channel.delete(reason=f"Ticket zamknięty przez {interaction.user}")
 
+# --- Realize Order Button ---
+class RealizeOrderView(View):
+    def __init__(self, user: discord.Member):
+        super().__init__(timeout=None)
+        self.user = user
+
+    @discord.ui.button(label="✅ Zrealizuj", style=discord.ButtonStyle.green, custom_id="realize_order_button")
+    async def realize_button(self, interaction: discord.Interaction, button: Button):
+        role = discord.utils.get(interaction.guild.roles, id=ROLE_CUSTOMER_ID)
+        if not role:
+            await interaction.response.send_message("❌ Nie znaleziono roli `customer`.", ephemeral=True)
+            return
+
+        try:
+            await self.user.add_roles(role)
+            await interaction.message.delete()
+            await interaction.response.send_message(f"✅ Zamówienie użytkownika {self.user.mention} zostało oznaczone jako zrealizowane.", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ Bot nie ma uprawnień do nadania roli.", ephemeral=True)
 
 
 # --- Slash command wyslij (lokalna, z wyborem kanału) ---
