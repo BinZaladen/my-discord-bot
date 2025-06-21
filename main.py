@@ -41,7 +41,6 @@ async def on_ready():
                 url=f"https://discord.com/channels/{bot.guilds[0].id}/{TICKET_CHANNEL_ID}"
             ))
 
-    # Lista wiadomości (kanał_id, treść)
     messages = [
         (1373266589310517338, f"""🛒 **Oferta itemów na sprzedaż**
 
@@ -67,10 +66,9 @@ async def on_ready():
 {get_emoji("Klata")} **Anarchiczny set 1** — 9zł
 
 🎉 **Eventówki:**
-
-{get_emoji("Miecz")} **Anarchiczny miecz** — 3zł  
-{get_emoji("MieczZajeczy")} **Zajęczy miecz** — 65zł  
-{get_emoji("Totem")} **Totem ułaskawienia** — 630zł  
+{get_emoji("Miecz")} **Anarchiczny miecz** — 3zł
+{get_emoji("MieczZajeczy")} **Zajęczy miecz** — 65zł
+{get_emoji("Totem")} **Totem ułaskawienia** — 630zł
 {get_emoji("Excalibur")} **Excalibur** — 370zł"""),
 
         (1373270295556788285, f"""🛒 **Oferta itemów na sprzedaż**
@@ -79,7 +77,6 @@ async def on_ready():
 💸 **1mln$** — 33zł
 
 🎉 **Eventówki:**
-
 {get_emoji("Excalibur")} **Excalibur** — 111zł  
 {get_emoji("Totem")} **Totem ułaskawienia** — 270zł  
 {get_emoji("Sakiewka")} **Sakiewka** — 50zł"""),
@@ -103,12 +100,11 @@ async def on_ready():
         if not channel:
             continue
 
-        # Usuń poprzednie wiadomości bota
+        # Usuwamy poprzednie wiadomości bota
         async for msg in channel.history(limit=20):
             if msg.author == bot.user:
                 await msg.delete()
 
-        # Wyślij nowy embed z przyciskiem
         embed = discord.Embed(description=text, color=discord.Color.blue())
         await channel.send(embed=embed, view=TicketRedirectButton())
 
