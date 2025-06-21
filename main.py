@@ -94,12 +94,7 @@ class SellBuySelectView(View):
         super().__init__(timeout=300)
         self.user = user
 
-class SellBuySelectView(View):
-    def __init__(self, user):
-        super().__init__(timeout=300)
-        self.user = user
-
-        self.select = discord.ui.Select(
+        select = discord.ui.Select(
             placeholder="Wybierz Sprzedaj lub Kup",
             options=[
                 discord.SelectOption(label="Sprzedaj", description="Sprzedaj coś", value="sprzedaj"),
@@ -107,36 +102,44 @@ class SellBuySelectView(View):
             ],
             custom_id="sellbuy_select"
         )
-        self.select.callback = self.select_callback
-        self.add_item(self.select)
 
-    async def select_callback(self, interaction: discord.Interaction):
-        if interaction.user != self.user:
-            await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
-            return
+        async def callback(interaction: discord.Interaction):
+            if interaction.user != self.user:
+                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
+                return
 
-        await interaction.response.defer()
-        view = ServerSelectView(self.user, self.select.values[0])
-        await interaction.message.edit(content=f"Wybrałeś: **{self.select.values[0].capitalize()}**. Teraz wybierz serwer.", view=view)
+            action = interaction.data['values'][0]
+            view = ServerSelectView(self.user, action)
+            await interaction.response.edit_message(content=f"Wybrałeś: **{action.capitalize()}**. Teraz wybierz serwer.", view=view)
+
+        select.callback = callback
+        self.add_item(select)
 
 # --- Server Select ---
-select = discord.ui.Select(
-    placeholder="Wybierz serwer",
-    options=options,
-    custom_id="server_select"
-)
+class ServerSelectView(View):
+    def __init__(self, user, action):
+        super().__init__(timeout=300)
+        self.user = user
+        self.action = action
 
-async def server_select_callback(interaction: discord.Interaction):
-    if interaction.user != self.user:
-        await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
-        return
+        options = [discord.SelectOption(label=s) for s in DATA.keys()]
+        select = discord.ui.Select(
+            placeholder="Wybierz serwer",
+            options=options,
+            custom_id="server_select"
+        )
 
-    server = select.values[0]
-    view = ModeSelectView(self.user, self.action, server)
-    await interaction.response.edit_message(content=f"Wybrałeś serwer: **{server}**. Teraz wybierz tryb.", view=view)
+        async def callback(interaction: discord.Interaction):
+            if interaction.user != self.user:
+                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
+                return
 
-select.callback = server_select_callback
-self.add_item(select)
+            server = interaction.data['values'][0]
+            view = ModeSelectView(self.user, self.action, server)
+            await interaction.response.edit_message(content=f"Wybrałeś serwer: **{server}**. Teraz wybierz tryb.", view=view)
+
+        select.callback = callback
+        self.add_item(select)
 
 # --- Mode Select ---
 class ModeSelectView(View):
@@ -148,22 +151,23 @@ class ModeSelectView(View):
 
         modes = DATA[server].keys()
         options = [discord.SelectOption(label=m) for m in modes]
-        self.select = discord.ui.Select(
+        select = discord.ui.Select(
             placeholder="Wybierz tryb",
             options=options,
             custom_id="mode_select"
         )
-        self.select.callback = self.mode_select_callback
-        self.add_item(self.select)
 
-    async def mode_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if interaction.user != self.user:
-            await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
-            return
+        async def callback(interaction: discord.Interaction):
+            if interaction.user != self.user:
+                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
+                return
 
-        mode = select.values[0]
-        view = ItemSelectView(self.user, self.action, self.server, mode)
-        await interaction.response.edit_message(content=f"Wybrałeś tryb: **{mode}**. Teraz wybierz itemy.", view=view)
+            mode = interaction.data['values'][0]
+            view = ItemSelectView(self.user, self.action, self.server, mode)
+            await interaction.response.edit_message(content=f"Wybrałeś tryb: **{mode}**. Teraz wybierz itemy.", view=view)
+
+        select.callback = callback
+        self.add_item(select)
 
 # --- Item Select ---
 class ItemSelectView(View):
@@ -178,22 +182,23 @@ class ItemSelectView(View):
 
         items = DATA[server][mode]
         options = [discord.SelectOption(label=i) for i in items]
-        self.select = discord.ui.Select(
+        select = discord.ui.Select(
             placeholder="Wybierz item do dodania",
             options=options,
             custom_id="item_select"
         )
-        self.select.callback = self.item_select_callback
-        self.add_item(self.select)
 
-    async def item_select_callback(self, select: discord.ui.Select, interaction: discord.Interaction):
-        if interaction.user != self.user:
-            await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
-            return
+        async def callback(interaction: discord.Interaction):
+            if interaction.user != self.user:
+                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
+                return
 
-        item = select.values[0]
-        modal = AmountModal(self, item, is_money=(item == "kasa"))
-        await interaction.response.send_modal(modal)
+            item = interaction.data['values'][0]
+            modal = AmountModal(self, item, is_money=(item == "kasa"))
+            await interaction.response.send_modal(modal)
+
+        select.callback = callback
+        self.add_item(select)
 
     @discord.ui.button(label="Zakończ wybór", style=discord.ButtonStyle.green, custom_id="finish_selection")
     async def finish_selection_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -233,8 +238,6 @@ class AmountModal(Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         amount = self.amount_input.value.strip()
-
-        # Walidacja prosta
         try:
             _ = float(amount.replace("k", "000").lower().replace(" ", ""))
         except ValueError:
