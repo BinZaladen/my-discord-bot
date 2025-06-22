@@ -40,6 +40,18 @@ DATA = {
     }
 }
 
+# --- Pomocnicza funkcja do parsowania wartości z 'k' i 'm' ---
+def parse_amount(amount_str: str) -> float:
+    s = amount_str.lower().replace(" ", "")
+    multiplier = 1
+    if s.endswith("k"):
+        multiplier = 1000
+        s = s[:-1]
+    elif s.endswith("m"):
+        multiplier = 1_000_000
+        s = s[:-1]
+    return float(s) * multiplier
+
 # --- WERYFIKACJA ---
 class VerificationView(View):
     def __init__(self, role_id):
@@ -88,11 +100,7 @@ class TicketStartView(View):
     @discord.ui.button(label="Utwórz ticket", style=discord.ButtonStyle.blurple, custom_id="create_ticket_button")
     async def create_ticket(self, interaction: discord.Interaction, button: Button):
         guild = interaction.guild
-        category = guild.get_channel(CATEGORY_TICKET_START_ID)
-        if category is None or not isinstance(category, discord.CategoryChannel):
-            # Poprawka: pobierz kategorię z CATEGORY_TICKET_ID
-            category = guild.get_channel(CATEGORY_TICKET_ID)
-
+        category = guild.get_channel(CATEGORY_TICKET_ID)  # Poprawione użycie zmiennej
         if category is None or not isinstance(category, discord.CategoryChannel):
             await interaction.response.send_message("❌ Nie znaleziono kategorii ticketów.", ephemeral=True)
             return
@@ -242,7 +250,10 @@ class ItemSelectView(View):
             await interaction.response.send_message("❗ Nie wybrałeś żadnych itemów.", ephemeral=True)
             return
 
-        embed = discord.Embed(title="Podsumowanie ticketa", color=discord.Color.blue())
+        # Kolory embedów w zależności od akcji
+        color = discord.Color.green() if self.action == "kup" else discord.Color.red()
+
+        embed = discord.Embed(title="Podsumowanie ticketa", color=color)
         embed.add_field(name="Użytkownik", value=self.user.mention, inline=False)
         embed.add_field(name="Akcja", value=self.action.capitalize(), inline=True)
         embed.add_field(name="Serwer", value=self.server, inline=True)
@@ -290,20 +301,22 @@ class AmountModal(Modal):
     async def on_submit(self, interaction: discord.Interaction):
         amount_raw = self.amount_input.value.strip()
 
-        # Prosta konwersja 'k' na 000 tylko do wyświetlania, nie zmieniamy dalej
         try:
-            amount_num = float(amount_raw.lower().replace("k", "000").replace(" ", ""))
+            amount_num = parse_amount(amount_raw)
         except ValueError:
             await interaction.response.send_message("❌ Podano niepoprawną liczbę.", ephemeral=True)
             return
 
+        # Dodawanie do już istniejącej wartości (jeśli istnieje)
         if self.item_name in self.parent_view.selected_items:
             prev = self.parent_view.selected_items[self.item_name]
             try:
-                prev_num = float(str(prev).lower().replace("k", "000").replace(" ", ""))
+                prev_num = parse_amount(str(prev))
                 total = prev_num + amount_num
-                self.parent_view.selected_items[self.item_name] = str(total)
+                # Zapamiętujemy w formacie string, np. '150000'
+                self.parent_view.selected_items[self.item_name] = str(int(total))
             except:
+                # Jeśli nie uda się sparsować poprzedniej wartości, nadpisujemy
                 self.parent_view.selected_items[self.item_name] = amount_raw
         else:
             self.parent_view.selected_items[self.item_name] = amount_raw
@@ -326,6 +339,7 @@ class CloseTicketView(View):
 
     @discord.ui.button(label="Zamknij ticket", style=discord.ButtonStyle.red, custom_id="close_ticket_button")
     async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Tylko osoby z rolą z listy ROLE_TICKET_CLOSE mogą zamykać tickety
         if not any(role.id in ROLE_TICKET_CLOSE for role in interaction.user.roles):
             await interaction.response.send_message("❌ Nie masz uprawnień do zamknięcia tego ticketa.", ephemeral=True)
             return
@@ -417,94 +431,48 @@ class RatingModal(Modal):
             color=discord.Color.orange(),
             timestamp=discord.utils.utcnow()
         )
-        embed.set_footer(text=f"Użytkownik {user} | Data wystawienia oceny")
+        embed.set_footer(text="Dziękujemy za ocenę!")
 
-        if self.summary_text:
-            embed.add_field(name="Podsumowanie zamówienia", value=self.summary_text, inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
-        embed.add_field(
-            name="Jak wystawić kolejną ocenę?",
-            value="Kliknij przycisk poniżej, aby wystawić kolejną ocenę."
-        )
-
-        channel = bot.get_channel(CHANNEL_RATINGS_ID)
-        if channel is None:
-            await interaction.response.send_message("❌ Nie mogę znaleźć kanału ocen.", ephemeral=True)
-            return
-
-        view = RatingButtonView(user, summary_text=self.summary_text)
-        await channel.send(embed=embed, view=view)
-
-        await interaction.response.send_message("✅ Dziękujemy za wystawienie oceny!", ephemeral=True)
-
-
-# --- Rating Button View ---
+# --- Button do ocen ---
 class RatingButtonView(View):
-    def __init__(self, user: discord.Member, summary_text: str = ""):
+    def __init__(self, user: discord.Member, summary_text: str):
         super().__init__(timeout=None)
         self.user = user
         self.summary_text = summary_text
 
-    @discord.ui.button(label="Wystaw ocenę", style=discord.ButtonStyle.blurple, custom_id="give_rating_button")
-    async def give_rating_button(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="Wystaw ocenę", style=discord.ButtonStyle.primary, custom_id="rating_button")
+    async def rating_button_callback(self, interaction: discord.Interaction, button: Button):
         if interaction.user != self.user:
-            await interaction.response.send_message("❌ Możesz ocenić tylko swoje zamówienie.", ephemeral=True)
+            await interaction.response.send_message("❌ Tylko użytkownik zamawiający może wystawić ocenę.", ephemeral=True)
             return
 
-        role = discord.utils.get(interaction.guild.roles, id=ROLE_CUSTOMER_ID)
-        if role not in interaction.user.roles:
-            await interaction.response.send_message("❌ Nie masz roli customer, nie możesz wystawić oceny.", ephemeral=True)
-            return
+        await interaction.response.send_modal(RatingModal(self.summary_text))
 
-        await interaction.response.send_modal(RatingModal(summary_text=self.summary_text))
-
-
-# --- Komenda slash do startu weryfikacji i ticketa ---
+# --- Komenda start ---
 @bot.event
 async def on_ready():
-    print(f"Bot zalogowany jako {bot.user}!")
+    print(f"Bot zalogowany jako {bot.user} (ID: {bot.user.id})")
     try:
         guild = bot.get_guild(GUILD_ID)
         await bot.tree.sync(guild=guild)
-        print("Slash commands synced!")
+        print(f"Slash commands synced for guild {guild.name} ({guild.id})")
     except Exception as e:
-        print(f"Błąd synchronizacji komend slash: {e}")
+        print(f"Błąd synchronizacji komend: {e}")
 
-@bot.tree.command(name="start", description="Wyślij wiadomość startową z weryfikacją i ticketem", guild=discord.Object(id=GUILD_ID))
-async def start(interaction: discord.Interaction):
+@bot.tree.command(name="start", description="Wyświetl menu startowe z weryfikacją i ticketem")
+@app_commands.guilds(GUILD_ID)
+async def start_command(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="Weryfikacja",
-        description="Kliknij przycisk poniżej, aby się zweryfikować.",
-        color=discord.Color.green()
+        title="Witaj! Wybierz opcję:",
+        description="Kliknij przycisk, aby się zweryfikować lub utworzyć ticket.",
+        color=discord.Color.blue()
     )
-    view = VerificationView(ROLE_VERIFIED_ID)
+    view = View()
+    view.add_item(VerificationView(ROLE_VERIFIED_ID).children[0])  # Dodaj przycisk weryfikacji
+    view.add_item(TicketStartView().children[0])  # Dodaj przycisk ticketu
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    ticket_channel = bot.get_channel(CHANNEL_TICKET_START_ID)
-    if ticket_channel:
-        embed_ticket = discord.Embed(
-            title="Ticket Support",
-            description="Kliknij przycisk poniżej, aby utworzyć ticket.",
-            color=discord.Color.blue()
-        )
-        view_ticket = TicketStartView()
-        await ticket_channel.send(embed=embed_ticket, view=view_ticket)
-
-    ratings_channel = bot.get_channel(CHANNEL_RATINGS_ID)
-    if ratings_channel:
-        async for msg in ratings_channel.history(limit=50):
-            if msg.author == bot.user and msg.embeds:
-                emb = msg.embeds[0]
-                if emb.title == "Wystaw ocenę":
-                    break
-        else:
-            embed_rating = discord.Embed(
-                title="Wystaw ocenę",
-                description="Kliknij przycisk poniżej, aby wystawić pierwszą ocenę.",
-                color=discord.Color.orange()
-            )
-            view_rating = RatingButtonView(user=interaction.user)
-            await ratings_channel.send(embed=embed_rating, view=view_rating)
-
-
-bot.run(os.getenv("DISCORD_TOKEN"))
+# --- Uruchomienie bota ---
+bot.run(os.environ.get("DISCORD_TOKEN"))
