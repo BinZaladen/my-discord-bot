@@ -2,7 +2,7 @@ import os
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import View, Button, Modal, TextInput
+from discord.ui import View, Button, Select, Modal, TextInput
 import asyncio
 import random
 
@@ -25,7 +25,6 @@ CATEGORY_TICKET_ID = 1373277957446959135
 ROLE_TICKET_CLOSE = [1373275898375176232, 1379538984031752212]
 
 CHANNEL_SUMMARY_ID = 1374479815914291240
-
 ROLE_CUSTOMER_ID = 1374099985288921088  # Rola 'customer' do nadania po realizacji
 
 CHANNEL_RATINGS_ID = 1375528888586731762  # Kanał ocen
@@ -40,9 +39,6 @@ DATA = {
         "Tryb D": ["item7", "item8", "kasa"],
     }
 }
-
-# --- Pamięć ocen (ticket_id: set(user_id)) ---
-already_rated = {}
 
 # --- WERYFIKACJA ---
 class VerificationView(View):
@@ -286,7 +282,6 @@ class AmountModal(Modal):
             await interaction.response.send_message("❌ Podano niepoprawną liczbę.", ephemeral=True)
             return
 
-        # Dodaj lub sumuj
         if self.item_name in self.parent_view.selected_items:
             prev = self.parent_view.selected_items[self.item_name]
             try:
@@ -304,7 +299,6 @@ class AmountModal(Modal):
             ephemeral=True
         )
 
-        # Po modalu wróć do wyboru itemów
         await interaction.message.edit(view=self.parent_view)
 
 
@@ -323,12 +317,16 @@ class CloseTicketView(View):
 
 # --- Realize Order Button ---
 class RealizeOrderView(View):
-    def __init__(self, user: discord.Member):
+    def __init__(self, user: discord.Member = None):
         super().__init__(timeout=None)
         self.user = user
 
     @discord.ui.button(label="✅ Zrealizuj", style=discord.ButtonStyle.green, custom_id="realize_order_button")
     async def realize_button(self, interaction: discord.Interaction, button: Button):
+        if self.user is None:
+            await interaction.response.send_message("❌ Brak użytkownika do realizacji.", ephemeral=True)
+            return
+
         role = discord.utils.get(interaction.guild.roles, id=ROLE_CUSTOMER_ID)
         if not role:
             await interaction.response.send_message("❌ Nie znaleziono roli `customer`.", ephemeral=True)
@@ -341,87 +339,99 @@ class RealizeOrderView(View):
         except discord.Forbidden:
             await interaction.response.send_message("❌ Bot nie ma uprawnień do nadania roli.", ephemeral=True)
 
-# --- OCENY ---
 
-# Panel startowy z embedem i przyciskiem do wystawiania oceny
+# --- System ocen ---
+
+# Przechowywanie ocen w pamięci, aby ograniczyć do 1 oceny na ticket
+user_rated_tickets = {}  # {user_id: set(ticket_message_id)}
+
 class RatingsPanelView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Wystaw ocenę ⭐", style=discord.ButtonStyle.primary, custom_id="panel_rate_button")
+    @discord.ui.button(label="Wystaw ocenę", style=discord.ButtonStyle.primary, custom_id="panel_rate_button")
     async def panel_rate_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(RateModal())
+        user_id = interaction.user.id
 
-# Modal do wystawienia oceny
-class RateModal(Modal, title="Wystaw ocenę (1-5 gwiazdek)"):
-    ticket_id_input = TextInput(label="ID ticketa (kanału)", placeholder="Np. 123456789012345678", required=True)
-    rating_input = TextInput(label="Ile gwiazdek? (1-5)", placeholder="Np. 5", max_length=1)
-
-    def __init__(self):
-        super().__init__()
-        self.add_item(self.ticket_id_input)
-        self.add_item(self.rating_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        ticket_id_str = self.ticket_id_input.value.strip()
-        try:
-            ticket_id = int(ticket_id_str)
-        except:
-            await interaction.response.send_message("❌ Podaj poprawne ID ticketa (kanału).", ephemeral=True)
+        # Sprawdź, czy użytkownik ma rolę customer (czy zrealizowany ticket)
+        role = discord.utils.get(interaction.guild.roles, id=ROLE_CUSTOMER_ID)
+        if role not in interaction.user.roles:
+            await interaction.response.send_message("❌ Nie masz uprawnień do wystawiania ocen. Musisz mieć zrealizowany ticket.", ephemeral=True)
             return
 
-        try:
-            rating = int(self.rating_input.value)
-            if rating < 1 or rating > 5:
-                raise ValueError
-        except ValueError:
-            await interaction.response.send_message("❌ Podaj liczbę od 1 do 5.", ephemeral=True)
-            return
+        # Pokaż modal z oceną
+        await interaction.response.send_modal(RatingModal())
 
-        # Sprawdzenie czy użytkownik już ocenił ten ticket
-        if ticket_id in already_rated and interaction.user.id in already_rated[ticket_id]:
-            await interaction.response.send_message("❌ Oceniłeś już to zamówienie.", ephemeral=True)
-            return
-
-        if ticket_id not in already_rated:
-            already_rated[ticket_id] = set()
-        already_rated[ticket_id].add(interaction.user.id)
-
-        guild = interaction.guild
-        channel_ratings = guild.get_channel(CHANNEL_RATINGS_ID)
-        member = guild.get_member(interaction.user.id)
-
-        if not channel_ratings:
-            await interaction.response.send_message("❌ Kanał do ocen nie został znaleziony.", ephemeral=True)
-            return
-
-        ticket_channel = guild.get_channel(ticket_id)
-
-        embed = discord.Embed(
-            title="Nowa ocena zamówienia",
-            color=discord.Color.gold(),
-            timestamp=interaction.created_at
-        )
-        embed.add_field(name="Klient", value=member.mention if member else f"<@{interaction.user.id}>", inline=False)
-        embed.add_field(name="Ticket", value=ticket_channel.mention if ticket_channel else "Nieznany", inline=False)
-        embed.add_field(name="Ocena", value=f"{'⭐' * rating} ({rating}/5)", inline=False)
-        embed.set_footer(text="Dziękujemy za Twoją opinię!")
-
-        # Pod embedem informacja i przycisk do wystawienia kolejnej oceny
-        await channel_ratings.send(embed=embed, view=RatingsInfoView())
-
-        await interaction.response.send_message("✅ Dziękujemy za wystawienie oceny!", ephemeral=True)
-
-# View z informacją i przyciskiem pod oceną
 class RatingsInfoView(View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Jak wystawić ocenę? Kliknij tutaj", style=discord.ButtonStyle.secondary, custom_id="info_rate_button")
-    async def info_rate_button(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_modal(RateModal())
+    @discord.ui.select(
+        placeholder="Wybierz ocenę",
+        options=[
+            discord.SelectOption(label="⭐️", description="1/5", value="1"),
+            discord.SelectOption(label="⭐️⭐️", description="2/5", value="2"),
+            discord.SelectOption(label="⭐️⭐️⭐️", description="3/5", value="3"),
+            discord.SelectOption(label="⭐️⭐️⭐️⭐️", description="4/5", value="4"),
+            discord.SelectOption(label="⭐️⭐️⭐️⭐️⭐️", description="5/5", value="5"),
+        ],
+        custom_id="rating_select"
+    )
+    async def select_callback(self, interaction: discord.Interaction, select: Select):
+        user = interaction.user
 
-# --- Event on_ready - wysyła wiadomość startową na kanał ocen jeśli jej nie ma ---
+        role = discord.utils.get(interaction.guild.roles, id=ROLE_CUSTOMER_ID)
+        if role not in user.roles:
+            await interaction.response.send_message("❌ Nie masz uprawnień do wystawiania ocen.", ephemeral=True)
+            return
+
+        rating_value = int(select.values[0])
+
+        # Tutaj możesz dodać logikę sprawdzenia 1 oceny na ticket — potrzebujesz jednak ID ticketa
+        # Tu uproszczenie — pozwalamy 1 ocenę na użytkownika
+
+        if user.id in user_rated_tickets:
+            await interaction.response.send_message("❌ Już wystawiłeś ocenę.", ephemeral=True)
+            return
+        user_rated_tickets[user.id] = True
+
+        # Pobierz informacje o użytkowniku, czasie itp.
+        now = discord.utils.utcnow()
+        description = f"Użytkownik: {user.mention}\nOcena: {'⭐️'*rating_value}\nData: {now.strftime('%Y-%m-%d %H:%M:%S')}\n\nDziękujemy za opinię!"
+
+        embed = discord.Embed(
+            title="Nowa ocena zamówienia",
+            description=description,
+            color=discord.Color.gold()
+        )
+
+        channel = bot.get_channel(CHANNEL_RATINGS_ID)
+        if channel:
+            await channel.send(embed=embed, view=RatingsPanelView())
+
+        await interaction.response.send_message("✅ Dziękujemy za wystawienie oceny!", ephemeral=True)
+
+class RatingModal(Modal):
+    def __init__(self):
+        super().__init__(title="Wystaw ocenę")
+
+        self.rating_select = Select(
+            placeholder="Wybierz ocenę (1-5)",
+            options=[
+                discord.SelectOption(label="⭐️", value="1"),
+                discord.SelectOption(label="⭐️⭐️", value="2"),
+                discord.SelectOption(label="⭐️⭐️⭐️", value="3"),
+                discord.SelectOption(label="⭐️⭐️⭐️⭐️", value="4"),
+                discord.SelectOption(label="⭐️⭐️⭐️⭐️⭐️", value="5"),
+            ]
+        )
+        self.add_item(self.rating_select)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        rating_value = int(self.rating_select.values[0])
+        await interaction.response.send_message(f"Dziękujemy za ocenę: {'⭐️'*rating_value}!", ephemeral=True)
+
+# --- Event on_ready i rejestracja widoków + wysyłanie startowych embedów ---
 @bot.event
 async def on_ready():
     print(f'Zalogowano jako {bot.user} (ID: {bot.user.id})')
@@ -431,31 +441,70 @@ async def on_ready():
         print("Nie znaleziono guilda.")
         return
 
-    channel_ratings = guild.get_channel(CHANNEL_RATINGS_ID)
-    if not channel_ratings:
-        print("Nie znaleziono kanału ocen.")
-        return
+    # Rejestracja widoków globalnych (ważne!)
+    bot.add_view(VerificationView(ROLE_VERIFIED_ID))
+    bot.add_view(TicketStartView())
+    bot.add_view(RealizeOrderView(None))
+    bot.add_view(RatingsPanelView())
+    bot.add_view(RatingsInfoView())
 
-    # Sprawdź, czy jest już wiadomość startowa z panelem
-    found = False
-    async for message in channel_ratings.history(limit=50):
-        if message.author == bot.user:
-            for comp in message.components:
-                for item in comp.children:
-                    if getattr(item, "custom_id", None) == "panel_rate_button":
-                        found = True
-                        break
-                if found:
-                    break
-        if found:
-            break
+    try:
+        await bot.tree.sync(guild=guild)
+        print("Slash commands zsynchronizowane.")
+    except Exception as e:
+        print(f"Błąd synchronizacji komend: {e}")
 
-    if not found:
-        embed = discord.Embed(
-            title="Panel ocen zamówień",
-            description="Kliknij przycisk poniżej, aby wystawić ocenę za swoje zamówienie.",
-            color=discord.Color.gold()
+    # Wysyłanie startowych embedów i widoków
+
+    # --- Kanał weryfikacji ---
+    channel_ver = guild.get_channel(CHANNEL_VERIFICATION_ID)
+    if channel_ver:
+        async for msg in channel_ver.history(limit=100):
+            if msg.author == bot.user:
+                await msg.delete()
+        embed_ver = discord.Embed(
+            title="🔒 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏 - Weryfikacja",
+            description="Kliknij przycisk poniżej i rozwiąż proste zadanie matematyczne, aby uzyskać dostęp do serwera.",
+            color=discord.Color.green()
         )
-        await channel_ratings.send(embed=embed, view=RatingsPanelView())
+        await channel_ver.send(embed=embed_ver, view=VerificationView(ROLE_VERIFIED_ID))
+
+    # --- Kanał startowy ticketów ---
+    channel_ticket_start = guild.get_channel(CHANNEL_TICKET_START_ID)
+    if channel_ticket_start:
+        async for msg in channel_ticket_start.history(limit=100):
+            if msg.author == bot.user:
+                await msg.delete()
+        embed_ticket = discord.Embed(
+            title="🎫 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏 - Ticket system",
+            description="Kliknij przycisk poniżej, aby utworzyć ticket na kupno lub sprzedaż przedmiotów.",
+            color=discord.Color.blurple()
+        )
+        await channel_ticket_start.send(embed=embed_ticket, view=TicketStartView())
+
+    # --- Kanał ocen ---
+    channel_ratings = guild.get_channel(CHANNEL_RATINGS_ID)
+    if channel_ratings:
+        # Sprawdź, czy jest już wiadomość panelu ocen z przyciskiem
+        found = False
+        async for msg in channel_ratings.history(limit=50):
+            if msg.author == bot.user:
+                for comp in msg.components:
+                    for item in comp.children:
+                        if getattr(item, "custom_id", None) == "panel_rate_button":
+                            found = True
+                            break
+                    if found:
+                        break
+            if found:
+                break
+
+        if not found:
+            embed_ratings = discord.Embed(
+                title="Panel ocen zamówień",
+                description="Kliknij przycisk poniżej, aby wystawić ocenę za swoje zamówienie.",
+                color=discord.Color.gold()
+            )
+            await channel_ratings.send(embed=embed_ratings, view=RatingsPanelView())
 
 bot.run(os.getenv("DISCORD_TOKEN"))
