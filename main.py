@@ -613,4 +613,5 @@ async def wyslij(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed)
 
-bot.run(os.getenv("TOKEN"))
+bot.run(os.getenv("DISCORD_TOKEN"))
+
