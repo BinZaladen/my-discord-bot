@@ -42,7 +42,8 @@ DATA = {
 
 # --- PAMIĘĆ OCEN: (user_id, ticket_id) -> True jeśli ocenił ---
 user_ratings = {}
-# --- PAMIĘĆ ZAMÓWIEŃ (ticket_id -> dane zamówienia) ---
+
+# --- PAMIĘĆ ZAMÓWIEŃ: ticket_channel_id -> dict z danymi zamówienia ---
 orders_data = {}
 
 # --- WERYFIKACJA ---
@@ -77,23 +78,13 @@ class VerificationModal(Modal):
             if role:
                 try:
                     await interaction.user.add_roles(role)
-                    embed = discord.Embed(
-                        title="✅ Weryfikacja zakończona!",
-                        description=f"Gratulacje {interaction.user.mention}, pomyślnie zweryfikowano Cię i nadano rolę.",
-                        color=discord.Color.green()
-                    )
-                    await interaction.response.send_message(embed=embed, ephemeral=True)
+                    await interaction.response.send_message("✅ Zostałeś zweryfikowany!", ephemeral=True)
                 except discord.Forbidden:
                     await interaction.response.send_message("🚫 Bot nie ma uprawnień do nadania roli.", ephemeral=True)
             else:
                 await interaction.response.send_message("❌ Nie znaleziono roli weryfikacji.", ephemeral=True)
         else:
-            embed = discord.Embed(
-                title="❌ Niepoprawna odpowiedź!",
-                description="Spróbuj jeszcze raz rozwiązać zadanie matematyczne.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("❌ Niepoprawna odpowiedź, spróbuj ponownie.", ephemeral=True)
 
 # --- Ticket Start View ---
 class TicketStartView(View):
@@ -105,22 +96,12 @@ class TicketStartView(View):
         guild = interaction.guild
         category = guild.get_channel(CATEGORY_TICKET_ID)
         if category is None or not isinstance(category, discord.CategoryChannel):
-            embed = discord.Embed(
-                title="❌ Błąd",
-                description="Nie znaleziono kategorii ticketów. Skontaktuj się z administratorem.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("❌ Nie znaleziono kategorii ticketów.", ephemeral=True)
             return
 
         existing_channel = discord.utils.get(guild.channels, name=f"ticket-{interaction.user.id}")
         if existing_channel:
-            embed = discord.Embed(
-                title="❗ Masz już otwarty ticket",
-                description=f"Przejdź do swojego ticketa: {existing_channel.mention}",
-                color=discord.Color.orange()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message(f"❗ Masz już otwarty ticket: {existing_channel.mention}", ephemeral=True)
             return
 
         overwrites = {
@@ -139,18 +120,8 @@ class TicketStartView(View):
             reason=f"Ticket utworzony przez {interaction.user}"
         )
 
-        embed = discord.Embed(
-            title="🎫 Ticket utworzony!",
-            description=f"Witaj {interaction.user.mention}!\nWybierz, czy chcesz coś **sprzedać** lub **kupić**.",
-            color=discord.Color.blurple()
-        )
-        await ticket_channel.send(embed=embed, view=SellBuySelectView(interaction.user))
-        embed_resp = discord.Embed(
-            title="✅ Ticket utworzony",
-            description=f"Twój ticket został utworzony: {ticket_channel.mention}\nW nim wybierz dalsze opcje.",
-            color=discord.Color.green()
-        )
-        await interaction.response.send_message(embed=embed_resp, ephemeral=True)
+        await interaction.response.send_message(f"✅ Ticket utworzony: {ticket_channel.mention}", ephemeral=True)
+        await ticket_channel.send(f"Witaj {interaction.user.mention}! Wybierz, czy chcesz coś sprzedać lub kupić.", view=SellBuySelectView(interaction.user))
 
 # --- Sell or Buy Select ---
 class SellBuySelectView(View):
@@ -169,22 +140,12 @@ class SellBuySelectView(View):
 
         async def callback(interaction: discord.Interaction):
             if interaction.user != self.user:
-                embed = discord.Embed(
-                    title="❌ Błąd",
-                    description="Nie możesz korzystać z czyjegoś ticketa.",
-                    color=discord.Color.red()
-                )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
                 return
 
             action = interaction.data['values'][0]
             view = ServerSelectView(self.user, action)
-            embed = discord.Embed(
-                title=f"Wybrałeś: {action.capitalize()}",
-                description="Teraz wybierz serwer.",
-                color=discord.Color.blue()
-            )
-            await interaction.response.edit_message(embed=embed, view=view)
+            await interaction.response.edit_message(content=f"Wybrałeś: **{action.capitalize()}**. Teraz wybierz serwer.", view=view)
 
         select.callback = callback
         self.add_item(select)
@@ -205,22 +166,12 @@ class ServerSelectView(View):
 
         async def callback(interaction: discord.Interaction):
             if interaction.user != self.user:
-                embed = discord.Embed(
-                    title="❌ Błąd",
-                    description="Nie możesz korzystać z czyjegoś ticketa.",
-                    color=discord.Color.red()
-                )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
                 return
 
             server = interaction.data['values'][0]
             view = ModeSelectView(self.user, self.action, server)
-            embed = discord.Embed(
-                title=f"Wybrałeś serwer: {server}",
-                description="Teraz wybierz tryb.",
-                color=discord.Color.blue()
-            )
-            await interaction.response.edit_message(embed=embed, view=view)
+            await interaction.response.edit_message(content=f"Wybrałeś serwer: **{server}**. Teraz wybierz tryb.", view=view)
 
         select.callback = callback
         self.add_item(select)
@@ -242,22 +193,12 @@ class ModeSelectView(View):
 
         async def callback(interaction: discord.Interaction):
             if interaction.user != self.user:
-                embed = discord.Embed(
-                    title="❌ Błąd",
-                    description="Nie możesz korzystać z czyjegoś ticketa.",
-                    color=discord.Color.red()
-                )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
                 return
 
             mode = interaction.data['values'][0]
             view = ItemSelectView(self.user, self.action, self.server, mode)
-            embed = discord.Embed(
-                title=f"Wybrałeś tryb: {mode}",
-                description="Teraz wybierz itemy.",
-                color=discord.Color.blue()
-            )
-            await interaction.response.edit_message(embed=embed, view=view)
+            await interaction.response.edit_message(content=f"Wybrałeś tryb: **{mode}**. Teraz wybierz itemy.", view=view)
 
         select.callback = callback
         self.add_item(select)
@@ -287,12 +228,7 @@ class ItemSelectView(View):
 
     async def item_select_callback(self, interaction: discord.Interaction):
         if interaction.user != self.user:
-            embed = discord.Embed(
-                title="❌ Błąd",
-                description="Nie możesz korzystać z czyjegoś ticketa.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
         item = interaction.data['values'][0]
@@ -301,33 +237,23 @@ class ItemSelectView(View):
 
     async def finish_selection_callback(self, interaction: discord.Interaction):
         if interaction.user != self.user:
-            embed = discord.Embed(
-                title="❌ Błąd",
-                description="Nie możesz korzystać z czyjegoś ticketa.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
             return
 
         if not self.selected_items:
-            embed = discord.Embed(
-                title="❗ Brak wybranych itemów",
-                description="Nie wybrałeś żadnych itemów.",
-                color=discord.Color.orange()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("❗ Nie wybrałeś żadnych itemów.", ephemeral=True)
             return
 
-        # Zapisz dane zamówienia do globalnej pamięci
+        # Zapisz dane zamówienia po ID kanału ticketa
         orders_data[str(interaction.channel.id)] = {
             "user_id": self.user.id,
             "action": self.action,
             "server": self.server,
             "mode": self.mode,
-            "items": self.selected_items.copy()
+            "items": self.selected_items
         }
 
-        embed = discord.Embed(title="📋 Podsumowanie ticketa", color=discord.Color.blue())
+        embed = discord.Embed(title="Podsumowanie ticketa", color=discord.Color.blue())
         embed.add_field(name="Użytkownik", value=self.user.mention, inline=False)
         embed.add_field(name="Akcja", value=self.action.capitalize(), inline=True)
         embed.add_field(name="Serwer", value=self.server, inline=True)
@@ -345,11 +271,7 @@ class ItemSelectView(View):
             view = RealizeOrderView(member, ticket_id=str(interaction.channel.id))
             await summary_channel.send(embed=embed, view=view)
 
-        embed_close = discord.Embed(
-            title="✅ Jeśli wszystko się zgadza, możesz zamknąć ticketa:",
-            color=discord.Color.green()
-        )
-        await interaction.followup.send(embed=embed_close, view=CloseTicketView(self.user.id))
+        await interaction.followup.send("✅ Jeśli wszystko się zgadza, możesz zamknąć ticketa:", view=CloseTicketView(self.user.id))
 
 
 class AmountModal(Modal):
@@ -372,12 +294,7 @@ class AmountModal(Modal):
         try:
             amount_num = float(amount_raw.lower().replace("k", "000").replace(" ", ""))
         except ValueError:
-            embed = discord.Embed(
-                title="❌ Błąd",
-                description="Podano niepoprawną liczbę.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("❌ Podano niepoprawną liczbę.", ephemeral=True)
             return
 
         # Dodaj lub sumuj
@@ -392,12 +309,11 @@ class AmountModal(Modal):
         else:
             self.parent_view.selected_items[self.item_name] = amount_raw
 
-        embed = discord.Embed(
-            title="✅ Dodano item",
-            description=f"Dodano **{self.item_name}** z wartością: **{amount_raw}**.\n\nMożesz wybrać kolejny item lub zakończyć wybór.",
-            color=discord.Color.green()
+        await interaction.response.send_message(
+            f"Dodano **{self.item_name}** z wartością: **{amount_raw}**.\n\n"
+            "Możesz wybrać kolejny item lub zakończyć wybór.",
+            ephemeral=True
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
         # Po modalu wróć do wyboru itemów
         await interaction.message.edit(view=self.parent_view)
@@ -412,12 +328,7 @@ class CloseTicketView(View):
     @discord.ui.button(label="Zamknij ticket", style=discord.ButtonStyle.red, custom_id="close_ticket_button")
     async def close_ticket_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not any(role.id in ROLE_TICKET_CLOSE for role in interaction.user.roles):
-            embed = discord.Embed(
-                title="❌ Brak uprawnień",
-                description="Nie masz uprawnień do zamknięcia tego ticketa.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("❌ Nie masz uprawnień do zamknięcia tego ticketa.", ephemeral=True)
             return
         await interaction.channel.delete(reason=f"Ticket zamknięty przez {interaction.user}")
 
@@ -432,192 +343,139 @@ class RealizeOrderView(View):
     async def realize_button(self, interaction: discord.Interaction, button: Button):
         role = discord.utils.get(interaction.guild.roles, id=ROLE_CUSTOMER_ID)
         if not role:
-            embed = discord.Embed(
-                title="❌ Błąd",
-                description="Nie znaleziono roli `customer`.",
-                color=discord.Color.red()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.response.send_message("❌ Nie znaleziono roli `customer`.", ephemeral=True)
             return
 
         try:
             await self.user.add_roles(role)
-            # Usuwamy wiadomość z realizacją (przycisk znika)
-            await interaction.message.delete()
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="✅ Zamówienie zrealizowane!",
-                    description=f"Zamówienie użytkownika {self.user.mention} zostało oznaczone jako zrealizowane.",
-                    color=discord.Color.green()
-                ),
-                ephemeral=True
-            )
+            await interaction.message.delete()  # Usuwamy wiadomość zrealizowania
+            await interaction.response.send_message(f"✅ Zamówienie użytkownika {self.user.mention} zostało oznaczone jako zrealizowane.", ephemeral=True)
         except discord.Forbidden:
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="❌ Błąd",
-                    description="Bot nie ma uprawnień do nadania roli.",
-                    color=discord.Color.red()
-                ),
-                ephemeral=True
-            )
+            await interaction.response.send_message("❌ Bot nie ma uprawnień do nadania roli.", ephemeral=True)
 
-# --- Rating (Oceny) ---
+# --- Oceny: przycisk pod oceną ---
+class RateButton(Button):
+    def __init__(self, ticket_id: str):
+        super().__init__(label="Wystaw ocenę", style=discord.ButtonStyle.primary, custom_id=f"rate_{ticket_id}")
 
-class RatingModal(Modal):
-    def __init__(self, user: discord.Member, ticket_id: str, order_info: dict):
-        super().__init__(title="Wystaw ocenę i komentarz")
+    async def callback(self, interaction: discord.Interaction):
+        user = interaction.user
+        ticket_id = self.custom_id.split("_", 1)[1]
+
+        # Sprawdź czy user ma rolę customer
+        if not any(role.id == ROLE_CUSTOMER_ID for role in user.roles):
+            await interaction.response.send_message("❌ Musisz mieć rolę klienta, aby wystawić ocenę.", ephemeral=True)
+            return
+
+        # Sprawdź, czy user już ocenił ten ticket
+        if user_ratings.get((user.id, ticket_id), False):
+            await interaction.response.send_message("❌ Już wystawiłeś ocenę dla tego ticketu.", ephemeral=True)
+            return
+
+        await interaction.response.send_modal(RatingModal(user, ticket_id))
+
+class RateView(View):
+    def __init__(self, ticket_id):
+        super().__init__(timeout=None)
+        self.add_item(RateButton(ticket_id))
+
+class RatingModal(Modal, title="Wystaw ocenę"):
+    def __init__(self, user, ticket_id):
+        super().__init__()
         self.user = user
         self.ticket_id = ticket_id
-        self.order_info = order_info
 
-        self.rating_select = Select(
-            placeholder="Wybierz ocenę",
-            options=[
-                discord.SelectOption(label="⭐️", description="1 - Słabo", value="1"),
-                discord.SelectOption(label="⭐⭐️", description="2 - Można lepiej", value="2"),
-                discord.SelectOption(label="⭐⭐⭐️", description="3 - OK", value="3"),
-                discord.SelectOption(label="⭐⭐⭐⭐️", description="4 - Dobrze", value="4"),
-                discord.SelectOption(label="⭐⭐⭐⭐⭐️", description="5 - Świetnie", value="5"),
-            ],
-            custom_id="rating_select"
+        self.stars = Select(
+            placeholder="Wybierz ilość gwiazdek",
+            options=[discord.SelectOption(label=f"{i} ★", value=str(i)) for i in range(1, 6)],
+            custom_id="stars_select"
         )
-        self.add_item(self.rating_select)
+        self.add_item(self.stars)
 
-        self.comment = TextInput(
-            label="Komentarz (opcjonalny)",
-            style=discord.TextStyle.paragraph,
-            required=False,
-            max_length=300,
-            placeholder="Napisz coś o transakcji..."
-        )
+        self.comment = TextInput(label="Komentarz (opcjonalny)", required=False, max_length=200)
         self.add_item(self.comment)
 
     async def on_submit(self, interaction: discord.Interaction):
-        rating = self.rating_select.values[0]
-        comment = self.comment.value.strip()
+        rating = int(self.stars.values[0])
+        comment = self.comment.value or "Brak komentarza"
 
-        # Zapamiętanie oceny, aby nie oceniać wielokrotnie
-        key = (self.user.id, self.ticket_id)
-        if key in user_ratings:
-            await interaction.response.send_message(
-                "❗ Już wystawiłeś ocenę dla tego zamówienia.",
-                ephemeral=True
+        # Zapisz ocenę
+        user_ratings[(self.user.id, self.ticket_id)] = True
+
+        # Pobierz dane zamówienia
+        order = orders_data.get(self.ticket_id)
+        order_info = ""
+        if order:
+            user_mention = f"<@{order['user_id']}>"
+            items = "\n".join(f"- **{k}**: {v}" for k, v in order['items'].items())
+            order_info = (
+                f"**Użytkownik:** {user_mention}\n"
+                f"**Akcja:** {order['action'].capitalize()}\n"
+                f"**Serwer:** {order['server']}\n"
+                f"**Tryb:** {order['mode']}\n"
+                f"**Itemy:**\n{items}\n"
             )
-            return
+        else:
+            order_info = "Brak danych zamówienia (ticket mógł zostać usunięty)."
 
-        user_ratings[key] = True
-
-        # Przyszykowanie embedu z oceną do kanału z ocenami
-        embed = discord.Embed(
-            title=f"Ocena od {self.user.display_name} - {rating}⭐",
-            description=f"**Użytkownik:** {self.user.mention}\n"
-                        f"**Zamówienie:**\n"
-                        f"```yaml\n"
-                        f"Akcja: {self.order_info.get('action', '?')}\n"
-                        f"Serwer: {self.order_info.get('server', '?')}\n"
-                        f"Tryb: {self.order_info.get('mode', '?')}\n"
-                        f"Itemy:\n" +
-                        "\n".join(f"- {k}: {v}" for k, v in self.order_info.get('items', {}).items()) +
-                        "\n```",
-            color=discord.Color.gold()
+        stars_text = "★" * rating + "☆" * (5 - rating)
+        text = (
+            f"**Ocena od {self.user.mention}**\n"
+            f"{order_info}"
+            f"⭐ {stars_text} ({rating}/5)\n"
+            f"💬 Komentarz: {comment}\n"
+            f"🆔 Ticket ID: {self.ticket_id}\n"
+            f"📅 Data: {discord.utils.format_dt(discord.utils.utcnow(), style='f')}"
         )
-        if comment:
-            embed.add_field(name="Komentarz", value=comment, inline=False)
 
-        # Przy tym embedzie info jak ocenić jeszcze raz (też przycisk)
-        view = RatingStartView()
-
-        rating_channel = bot.get_channel(CHANNEL_RATINGS_ID)
-        if rating_channel:
-            await rating_channel.send(embed=embed, view=view)
+        channel = bot.get_channel(CHANNEL_RATINGS_ID)
+        if channel:
+            await channel.send(text, view=RateView(self.ticket_id))
 
         await interaction.response.send_message("✅ Dziękujemy za wystawienie oceny!", ephemeral=True)
 
-class RatingStartView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Wystaw ocenę", style=discord.ButtonStyle.primary, custom_id="start_rating_button")
-    async def start_rating(self, interaction: discord.Interaction, button: Button):
-        # Pobranie danych zamówienia po ID kanału ticketu
-        ticket_id = str(interaction.message.reference.channel_id) if interaction.message.reference else None
-        if ticket_id is None or ticket_id not in orders_data:
-            # Jeśli brak danych, to przypomnij info
-            await interaction.response.send_message("❌ Nie znaleziono danych zamówienia do oceny.", ephemeral=True)
-            return
-
-        order_info = orders_data[ticket_id]
-        modal = RatingModal(interaction.user, ticket_id, order_info)
-        await interaction.response.send_modal(modal)
-
-# --- Startowanie bota i komendy ---
-
+# --- Komenda slash do startu ---
 @bot.event
 async def on_ready():
-    print(f"Bot zalogowany jako {bot.user}!")
-    guild = bot.get_guild(GUILD_ID)
-
-    # Rejestracja lokalnych komend slash
+    print(f"Bot zalogowany jako {bot.user}")
     try:
-        synced = await bot.tree.sync(guild=guild)
-        print(f"Zsynchronizowano {len(synced)} komend slash.")
+        guild = discord.Object(id=GUILD_ID)
+        await bot.tree.sync(guild=guild)
+        print("Slash commands zsynchronizowane")
     except Exception as e:
-        print(f"Błąd synchronizacji komend: {e}")
+        print(f"Błąd sync slash commands: {e}")
 
-    # Wysyłamy wiadomość startową z weryfikacją, jeśli jeszcze nie ma
-    channel = bot.get_channel(CHANNEL_VERIFICATION_ID)
-    messages = await channel.history(limit=10).flatten()
-    if not any(m.author == bot.user and m.embeds for m in messages):
-        view = VerificationView(ROLE_VERIFIED_ID)
-        embed = discord.Embed(
-            title="🔐 Weryfikacja użytkownika",
-            description="Aby uzyskać dostęp do serwera, kliknij przycisk i rozwiąż krótkie zadanie matematyczne.",
-            color=discord.Color.green()
-        )
-        await channel.send(embed=embed, view=view)
-
-    # Wysyłamy wiadomość startową do tworzenia ticketów, jeśli jeszcze nie ma
-    ticket_start_channel = bot.get_channel(CHANNEL_TICKET_START_ID)
-    messages = await ticket_start_channel.history(limit=10).flatten()
-    if not any(m.author == bot.user and m.content is None and m.embeds for m in messages):
-        embed = discord.Embed(
-            title="🎫 System ticketów",
-            description="Kliknij przycisk, aby utworzyć ticket i rozpocząć proces kupna/sprzedaży.",
-            color=discord.Color.blurple()
-        )
-        view = TicketStartView()
-        await ticket_start_channel.send(embed=embed, view=view)
-
-    # Wysyłamy startową wiadomość z ocenami na kanale ocen jeśli brak
-    rating_channel = bot.get_channel(CHANNEL_RATINGS_ID)
-    messages = await rating_channel.history(limit=10).flatten()
-    if not any(m.author == bot.user and m.embeds for m in messages):
-        embed = discord.Embed(
-            title="⭐ Wystaw ocenę",
-            description="Kliknij przycisk poniżej, aby wystawić ocenę dla zamówienia.",
-            color=discord.Color.gold()
-        )
-        view = RatingStartView()
-        await rating_channel.send(embed=embed, view=view)
-
-
-# Slash command do wysyłania embedów (przykład z Twoich wcześniejszych prośb)
-@bot.tree.command(name="wyslij", description="Wyślij wiadomość na kanał.")
-@app_commands.guilds(discord.Object(id=GUILD_ID))
-async def wyslij(interaction: discord.Interaction):
+@bot.tree.command(name="startuj_ticket", description="Wyślij wiadomość startową do tworzenia ticketów", guild=discord.Object(id=GUILD_ID))
+async def startuj_ticket(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="Przykładowa wiadomość",
-        description="To jest wiadomość wysłana przez komendę slash.",
+        title="🎫 Utwórz swój ticket",
+        description="Kliknij przycisk poniżej, aby utworzyć nowy ticket i złożyć zamówienie.",
         color=discord.Color.blue()
     )
-    await interaction.response.send_message(embed=embed)
+    view = TicketStartView()
+    await interaction.response.send_message(embed=embed, view=view)
 
-import os
+@bot.tree.command(name="startuj_weryfikacje", description="Wyślij wiadomość do weryfikacji", guild=discord.Object(id=GUILD_ID))
+async def startuj_weryfikacje(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="✅ Weryfikacja",
+        description="Kliknij przycisk, aby się zweryfikować rozwiązując proste zadanie matematyczne.",
+        color=discord.Color.green()
+    )
+    view = VerificationView(ROLE_VERIFIED_ID)
+    await interaction.response.send_message(embed=embed, view=view)
 
-TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN")
+# --- Event do usuwania pamięci po usunięciu ticketu ---
+@bot.event
+async def on_guild_channel_delete(channel):
+    if str(channel.id) in orders_data:
+        del orders_data[str(channel.id)]
+        print(f"Usunięto dane zamówienia z kanału {channel.name} ({channel.id})")
 
-if TOKEN is None:
-    raise ValueError("Nie znaleziono zmiennej środowiskowej DISCORD_TOKEN ani TOKEN. Ustaw ją przed uruchomieniem bota.")
-
-bot.run(TOKEN)
+# --- Uruchomienie bota ---
+if __name__ == "__main__":
+    TOKEN = os.getenv("DISCORD_TOKEN")
+    if not TOKEN:
+        print("Błąd: Nie ustawiono zmiennej środowiskowej DISCORD_TOKEN")
+    else:
+        bot.run(TOKEN)
