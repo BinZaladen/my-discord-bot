@@ -3,7 +3,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from discord.ui import View, Button, Select, Modal, TextInput
-import asyncio
 import random
 
 intents = discord.Intents.default()
@@ -89,7 +88,11 @@ class TicketStartView(View):
     @discord.ui.button(label="Utwórz ticket", style=discord.ButtonStyle.blurple, custom_id="create_ticket_button")
     async def create_ticket(self, interaction: discord.Interaction, button: Button):
         guild = interaction.guild
-        category = guild.get_channel(CATEGORY_TICKET_ID)
+        category = guild.get_channel(CATEGORY_TICKET_START_ID)
+        if category is None or not isinstance(category, discord.CategoryChannel):
+            # Poprawka: pobierz kategorię z CATEGORY_TICKET_ID
+            category = guild.get_channel(CATEGORY_TICKET_ID)
+
         if category is None or not isinstance(category, discord.CategoryChannel):
             await interaction.response.send_message("❌ Nie znaleziono kategorii ticketów.", ephemeral=True)
             return
@@ -287,6 +290,7 @@ class AmountModal(Modal):
     async def on_submit(self, interaction: discord.Interaction):
         amount_raw = self.amount_input.value.strip()
 
+        # Prosta konwersja 'k' na 000 tylko do wyświetlania, nie zmieniamy dalej
         try:
             amount_num = float(amount_raw.lower().replace("k", "000").replace(" ", ""))
         except ValueError:
@@ -346,7 +350,7 @@ class RealizeOrderView(View):
             await interaction.message.delete()
             await interaction.response.send_message(f"✅ Zamówienie użytkownika {self.user.mention} zostało oznaczone jako zrealizowane.", ephemeral=True)
 
-            # Po zrealizowaniu wyślij info na kanał ocen, jeśli chcesz od razu przycisk do oceny:
+            # Po zrealizowaniu wyślij info na kanał ocen z przyciskiem oceny:
             ratings_channel = bot.get_channel(CHANNEL_RATINGS_ID)
             if ratings_channel:
                 embed = discord.Embed(
@@ -461,7 +465,6 @@ async def on_ready():
     print(f"Bot zalogowany jako {bot.user}!")
     try:
         guild = bot.get_guild(GUILD_ID)
-        # Rejestracja komendy slash tylko na konkretnym serwerze
         await bot.tree.sync(guild=guild)
         print("Slash commands synced!")
     except Exception as e:
@@ -477,7 +480,6 @@ async def start(interaction: discord.Interaction):
     view = VerificationView(ROLE_VERIFIED_ID)
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
-    # Wiadomość z przyciskiem tworzenia ticketa (na kanale ticketów)
     ticket_channel = bot.get_channel(CHANNEL_TICKET_START_ID)
     if ticket_channel:
         embed_ticket = discord.Embed(
@@ -488,10 +490,8 @@ async def start(interaction: discord.Interaction):
         view_ticket = TicketStartView()
         await ticket_channel.send(embed=embed_ticket, view=view_ticket)
 
-    # Wiadomość startowa na kanał ocen - tylko jeśli nie ma jeszcze
     ratings_channel = bot.get_channel(CHANNEL_RATINGS_ID)
     if ratings_channel:
-        # Sprawdzimy, czy jest już taka wiadomość (tytuł "Wystaw ocenę")
         async for msg in ratings_channel.history(limit=50):
             if msg.author == bot.user and msg.embeds:
                 emb = msg.embeds[0]
