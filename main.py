@@ -613,5 +613,11 @@ async def wyslij(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed)
 
-bot.run(os.getenv("DISCORD_TOKEN"))
+import os
 
+TOKEN = os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN")
+
+if TOKEN is None:
+    raise ValueError("Nie znaleziono zmiennej środowiskowej DISCORD_TOKEN ani TOKEN. Ustaw ją przed uruchomieniem bota.")
+
+bot.run(TOKEN)
