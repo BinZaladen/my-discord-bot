@@ -15,7 +15,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # --- Ustaw ID serwera do rejestracji lokalnych komend slash ---
 GUILD_ID = 1373253103176122399  # <-- wpisz tutaj ID swojego serwera
 
-# ID kanałów, kategorii i ról
+# ID kanałów, kategorii i ról (podmień na swoje)
 CHANNEL_VERIFICATION_ID = 1373258480382771270
 ROLE_VERIFIED_ID = 1373275307150278686
 
@@ -25,9 +25,9 @@ CATEGORY_TICKET_ID = 1373277957446959135
 ROLE_TICKET_CLOSE = [1373275898375176232, 1379538984031752212]
 
 CHANNEL_SUMMARY_ID = 1374479815914291240
-ROLE_CUSTOMER_ID = 1374099985288921088  # Rola 'customer' do nadania po realizacji
+ROLE_CUSTOMER_ID = 1374099985288921088
 
-CHANNEL_RATINGS_ID = 1375528888586731762  # Kanał gdzie będą pokazywane oceny
+CHANNEL_RATINGS_ID = 1375528888586731762
 
 DATA = {
     "Serwer 1": {
@@ -40,11 +40,8 @@ DATA = {
     }
 }
 
-# --- PAMIĘĆ OCEN: (user_id, ticket_id) -> True jeśli ocenił ---
-user_ratings = {}
-
-# --- PAMIĘĆ ZAMÓWIEŃ: ticket_channel_id -> dict z danymi zamówienia ---
-orders_data = {}
+user_ratings = {}  # (user_id, ticket_id) -> bool
+orders_data = {}   # ticket_channel_id -> order data (dict)
 
 # --- WERYFIKACJA ---
 class VerificationView(View):
@@ -244,15 +241,6 @@ class ItemSelectView(View):
             await interaction.response.send_message("❗ Nie wybrałeś żadnych itemów.", ephemeral=True)
             return
 
-        # Zapisz dane zamówienia po ID kanału ticketa
-        orders_data[str(interaction.channel.id)] = {
-            "user_id": self.user.id,
-            "action": self.action,
-            "server": self.server,
-            "mode": self.mode,
-            "items": self.selected_items
-        }
-
         embed = discord.Embed(title="Podsumowanie ticketa", color=discord.Color.blue())
         embed.add_field(name="Użytkownik", value=self.user.mention, inline=False)
         embed.add_field(name="Akcja", value=self.action.capitalize(), inline=True)
@@ -262,6 +250,15 @@ class ItemSelectView(View):
         items_str = "\n".join(f"- **{it}**: {qty}" for it, qty in self.selected_items.items())
         embed.add_field(name="Wybrane itemy", value=items_str, inline=False)
         embed.set_footer(text="Ktoś wkrótce odpowie na Twojego ticketa.")
+
+        # Zapisz dane zamówienia globalnie do orders_data pod ID kanału ticketu
+        orders_data[str(interaction.channel.id)] = {
+            "user_id": self.user.id,
+            "action": self.action,
+            "server": self.server,
+            "mode": self.mode,
+            "items": self.selected_items.copy()
+        }
 
         await interaction.response.edit_message(content=None, embed=embed, view=None)
 
@@ -348,12 +345,14 @@ class RealizeOrderView(View):
 
         try:
             await self.user.add_roles(role)
-            await interaction.message.delete()  # Usuwamy wiadomość zrealizowania
+            # Usuwamy wiadomość z kanału podsumowania (logów)
+            await interaction.message.delete()
+
             await interaction.response.send_message(f"✅ Zamówienie użytkownika {self.user.mention} zostało oznaczone jako zrealizowane.", ephemeral=True)
         except discord.Forbidden:
             await interaction.response.send_message("❌ Bot nie ma uprawnień do nadania roli.", ephemeral=True)
 
-# --- Oceny: przycisk pod oceną ---
+# --- Oceny ---
 class RateButton(Button):
     def __init__(self, ticket_id: str):
         super().__init__(label="Wystaw ocenę", style=discord.ButtonStyle.primary, custom_id=f"rate_{ticket_id}")
@@ -402,80 +401,120 @@ class RatingModal(Modal, title="Wystaw ocenę"):
         # Zapisz ocenę
         user_ratings[(self.user.id, self.ticket_id)] = True
 
-        # Pobierz dane zamówienia
-        order = orders_data.get(self.ticket_id)
-        order_info = ""
+        # Pobierz dane zamówienia do podsumowania
+        order = orders_data.get(self.ticket_id, None)
         if order:
             user_mention = f"<@{order['user_id']}>"
-            items = "\n".join(f"- **{k}**: {v}" for k, v in order['items'].items())
-            order_info = (
-                f"**Użytkownik:** {user_mention}\n"
-                f"**Akcja:** {order['action'].capitalize()}\n"
-                f"**Serwer:** {order['server']}\n"
-                f"**Tryb:** {order['mode']}\n"
-                f"**Itemy:**\n{items}\n"
-            )
+            action = order['action'].capitalize()
+            server = order['server']
+            mode = order['mode']
+            items_str = "\n".join(f"- **{it}**: {qty}" for it, qty in order['items'].items())
         else:
-            order_info = "Brak danych zamówienia (ticket mógł zostać usunięty)."
+            user_mention = "Nieznany użytkownik"
+            action = "Nieznana akcja"
+            server = "Nieznany serwer"
+            mode = "Nieznany tryb"
+            items_str = "Brak danych"
 
         stars_text = "★" * rating + "☆" * (5 - rating)
         text = (
             f"**Ocena od {self.user.mention}**\n"
-            f"{order_info}"
             f"⭐ {stars_text} ({rating}/5)\n"
-            f"💬 Komentarz: {comment}\n"
-            f"🆔 Ticket ID: {self.ticket_id}\n"
-            f"📅 Data: {discord.utils.format_dt(discord.utils.utcnow(), style='f')}"
+            f"💬 Komentarz: {comment}\n\n"
+            f"**Dane zamówienia:**\n"
+            f"Użytkownik: {user_mention}\n"
+            f"Akcja: {action}\n"
+            f"Serwer: {server}\n"
+            f"Tryb: {mode}\n"
+            f"Itemy:\n{items_str}"
         )
 
-        channel = bot.get_channel(CHANNEL_RATINGS_ID)
-        if channel:
-            await channel.send(text, view=RateView(self.ticket_id))
+        ratings_channel = bot.get_channel(CHANNEL_RATINGS_ID)
+        if ratings_channel:
+            await ratings_channel.send(text, view=RateView(self.ticket_id))
 
         await interaction.response.send_message("✅ Dziękujemy za wystawienie oceny!", ephemeral=True)
 
-# --- Komenda slash do startu ---
+# --- Slash command do wysłania wiadomości weryfikacji lub ticket start ---
+class SendMessageModal(Modal, title="Wiadomość do wysłania"):
+    def __init__(self, channel_id: int):
+        super().__init__()
+        self.channel_id = channel_id
+        self.message_input = TextInput(label="Treść wiadomości", style=discord.TextStyle.paragraph)
+        self.add_item(self.message_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        channel = bot.get_channel(self.channel_id)
+        if not channel:
+            await interaction.response.send_message("❌ Nie znaleziono kanału.", ephemeral=True)
+            return
+        try:
+            await channel.send(self.message_input.value)
+            await interaction.response.send_message("✅ Wiadomość wysłana.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Błąd: {e}", ephemeral=True)
+
+@bot.tree.command(name="wyslij", description="Wyślij wiadomość na wybrany kanał")
+@app_commands.describe(channel="Kanał, do którego wyślesz wiadomość")
+async def wyslij(interaction: discord.Interaction, channel: discord.TextChannel):
+    modal = SendMessageModal(channel.id)
+    await interaction.response.send_modal(modal)
+
+# --- ON READY ---
 @bot.event
 async def on_ready():
-    print(f"Bot zalogowany jako {bot.user}")
+    print(f"Zalogowano jako {bot.user} (ID: {bot.user.id})")
+
+    # Wysyłamy wiadomość weryfikacyjną na kanał weryfikacji
+    channel_ver = bot.get_channel(CHANNEL_VERIFICATION_ID)
+    if channel_ver:
+        try:
+            # Czy jest już taka wiadomość (usuń własne wiadomości bota, żeby nie spamować)
+            async for msg in channel_ver.history(limit=50):
+                if msg.author == bot.user and msg.embeds:
+                    await msg.delete()
+            embed_ver = discord.Embed(
+                title="🔒 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏 - Weryfikacja",
+                description="Kliknij przycisk poniżej i rozwiąż proste zadanie matematyczne, aby uzyskać dostęp do serwera.",
+                color=discord.Color.green()
+            )
+            await channel_ver.send(embed=embed_ver, view=VerificationView(ROLE_VERIFIED_ID))
+            print("Wiadomość weryfikacyjna wysłana.")
+        except Exception as e:
+            print(f"Błąd przy wysyłaniu weryfikacji: {e}")
+    else:
+        print("Nie znaleziono kanału weryfikacji.")
+
+    # Wysyłamy wiadomość startową ticketów
+    channel_ticket = bot.get_channel(CHANNEL_TICKET_START_ID)
+    if channel_ticket:
+        try:
+            async for msg in channel_ticket.history(limit=50):
+                if msg.author == bot.user and msg.embeds:
+                    await msg.delete()
+            embed_ticket = discord.Embed(
+                title="🎫 𝟰𝟰𝟰 𝐒𝐇𝐎𝐏 - Ticket System",
+                description="Kliknij przycisk poniżej, aby utworzyć nowy ticket.",
+                color=discord.Color.blue()
+            )
+            await channel_ticket.send(embed=embed_ticket, view=TicketStartView())
+            print("Wiadomość ticketów wysłana.")
+        except Exception as e:
+            print(f"Błąd przy wysyłaniu ticketów: {e}")
+    else:
+        print("Nie znaleziono kanału ticketów.")
+
+    # Synchronizacja slash komend
     try:
-        guild = discord.Object(id=GUILD_ID)
-        await bot.tree.sync(guild=guild)
-        print("Slash commands zsynchronizowane")
+        synced = await bot.tree.sync(guild=discord.Object(id=GUILD_ID))
+        print(f"Slash commands zsynchronizowane: {len(synced)}")
     except Exception as e:
-        print(f"Błąd sync slash commands: {e}")
+        print(f"Błąd synchronizacji slash commands: {e}")
 
-@bot.tree.command(name="startuj_ticket", description="Wyślij wiadomość startową do tworzenia ticketów", guild=discord.Object(id=GUILD_ID))
-async def startuj_ticket(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="🎫 Utwórz swój ticket",
-        description="Kliknij przycisk poniżej, aby utworzyć nowy ticket i złożyć zamówienie.",
-        color=discord.Color.blue()
-    )
-    view = TicketStartView()
-    await interaction.response.send_message(embed=embed, view=view)
-
-@bot.tree.command(name="startuj_weryfikacje", description="Wyślij wiadomość do weryfikacji", guild=discord.Object(id=GUILD_ID))
-async def startuj_weryfikacje(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title="✅ Weryfikacja",
-        description="Kliknij przycisk, aby się zweryfikować rozwiązując proste zadanie matematyczne.",
-        color=discord.Color.green()
-    )
-    view = VerificationView(ROLE_VERIFIED_ID)
-    await interaction.response.send_message(embed=embed, view=view)
-
-# --- Event do usuwania pamięci po usunięciu ticketu ---
-@bot.event
-async def on_guild_channel_delete(channel):
-    if str(channel.id) in orders_data:
-        del orders_data[str(channel.id)]
-        print(f"Usunięto dane zamówienia z kanału {channel.name} ({channel.id})")
-
-# --- Uruchomienie bota ---
+# --- RUN ---
 if __name__ == "__main__":
     TOKEN = os.getenv("DISCORD_TOKEN")
     if not TOKEN:
-        print("Błąd: Nie ustawiono zmiennej środowiskowej DISCORD_TOKEN")
+        print("❌ Nie znaleziono tokena w zmiennej środowiskowej DISCORD_TOKEN.")
     else:
         bot.run(TOKEN)
