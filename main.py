@@ -47,9 +47,9 @@ async def on_ready():
             "content": """🛒 **Oferta itemów na sprzedaż**
 💵 4,5k$ — 1zł
 <:Elytra:1374797373406187580> Elytra — 50zł
-<:ANA2:137479901735931494> Anarchiczny set 2 — 28zł
+<:ANA2:1374799017359314944> Anarchiczny set 2 — 28zł
 <:Klata:1374793644246306866> Anarchiczny set 1 — 9zł
-<:Klata:1374793644246306866> Anarchiczny set 1 — 9zł
+<:Miecz:1374791139462352906> Anarchiczny miecz — 3zł
 
 🎉 **Eventówki**
 <:MieczZajeczy:1375486003891929088> Kruliczy miecz — 100zł
