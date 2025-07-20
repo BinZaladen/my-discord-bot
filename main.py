@@ -7,10 +7,8 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Kanały docelowe i ich oferty (ID kanału : treść oferty)
 OFFERS = {
     1373266589310517338: (
-        "🛒 Oferta itemów na sprzedaż\n\n"
         "<:elytra:1374797373406187580> Elytra — 12zł\n"
         "<:buty:1374796797222064230> Buty flasha — 5zł\n"
         "<:miecz:1374791139462352906> Miecz 6 — 3zł\n"
@@ -19,7 +17,6 @@ OFFERS = {
         "Obraz"
     ),
     1373267159576481842: (
-        "🛒 Oferta itemów na sprzedaż\n\n"
         "<:klata:1374793644246306866> Set 25 — 30zł\n"
         "<:miecz:1374791139462352906> Miecz 25 — 25zł\n"
         "<:kilof:1374795407493959751> Kilof 25 — 10zł\n"
@@ -27,7 +24,6 @@ OFFERS = {
         "Obraz"
     ),
     1373268875407396914: (
-        "🛒 Oferta itemów na sprzedaż\n\n"
         "💵 4,5k$ — 1zł\n"
         "💸 50k$ — 12zł\n"
         "💸 550k$ — 130zł\n"
@@ -40,7 +36,6 @@ OFFERS = {
         "<:exalibur:1374785662191927416> Excalibur — 370zł"
     ),
     1373270295556788285: (
-        "🛒 Oferta itemów na sprzedaż\n\n"
         "💵 50k$ — 1zł\n"
         "💸 1mln$ — 33zł\n\n"
         "🎉 Eventówki:\n"
@@ -50,14 +45,12 @@ OFFERS = {
         "Obraz"
     ),
     1373273108093337640: (
-        "🛒 Oferta itemów na sprzedaż\n\n"
         "💸 10mld$ — 2zł\n"
         "<:miecz:1374791139462352906> Miecz 35 — 65zł\n"
         "<:klata:1374793644246306866> Set 35 — 90zł\n\n"
         "Obraz"
     ),
     1374380939970347019: (
-        "🛒 Oferta itemów na sprzedaż\n\n"
         "💵 15k$ — 1zł\n"
         "<:buda:1375488639496093828> Buda — 30zł\n"
         "<:loveswap:1375490111801790464> Love swap — 100zł\n"
@@ -76,12 +69,15 @@ async def on_ready():
             print(f"Nie znaleziono kanału o ID {channel_id}")
             continue
 
-        # Usuwanie wiadomości bota w kanale (limit 100)
         async for message in channel.history(limit=100):
             if message.author == bot.user:
                 await message.delete()
 
-        embed = discord.Embed(title="🛒 Oferta itemów na sprzedaż", description=offer_text, color=discord.Color.green())
+        embed = discord.Embed(
+            title="🛒 Oferta itemów na sprzedaż",
+            description=offer_text,
+            color=discord.Color.blue()
+        )
         await channel.send(embed=embed)
 
     print("Wszystkie oferty zostały wysłane.")
