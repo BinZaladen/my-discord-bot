@@ -37,16 +37,16 @@ DATA = {
     "𝐀𝐍𝐀𝐑𝐂𝐇𝐈𝐀": {
         "𝐋𝐈𝐅𝐄𝐒𝐓𝐄𝐀𝐋": [" Elytra", "Anarchiczny set 2", "Anarchiczny set 1", "Anarchiczny miecz", "Kruliczy miecz", "Totem ułaskawienia", "Excalibur", "kasa"],
         "𝐁𝐎𝐗𝐏𝐕𝐏": ["Excalibur", "Totem ułaskawienia", "Sakiewka", "kasa"],
- "𝐑𝐀𝐏𝐘": {
+    },
+    "𝐑𝐀𝐏𝐘": {
         "𝐋𝐈𝐅𝐄𝐒𝐓𝐄𝐀𝐋": ["nie dostępne", "nie dostępne", "nie dostępne"],
         "𝐁𝐎𝐗𝐏𝐕𝐏": ["Miecz 35", "Set 35", "kasa"],
     },
- "𝐏𝐘𝐊𝐌𝐂": {
+    "𝐏𝐘𝐊𝐌𝐂": {
         "𝐋𝐈𝐅𝐄𝐒𝐓𝐄𝐀𝐋": ["Buda", "Love swap", "Klata meduzy", "kasa"],
         "𝐁𝐎𝐗𝐏𝐕𝐏": ["nie dostępne", "nie dostępne", "nie dostępne"],
     }
 }
-
 # --- PAMIĘĆ OCEN: (user_id, ticket_id) -> True jeśli ocenił ---
 user_ratings = {}
 
