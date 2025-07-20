@@ -181,31 +181,31 @@ class ServerSelectView(View):
         self.add_item(select)
 
 # --- Mode Select ---
-class ItemModal(Modal, title="Wprowadź itemy na sprzedaż"):
-    item_name = TextInput(label="Nazwa itemu", required=True)
-    item_quantity = TextInput(label="Ilość", required=True)
-    item_price = TextInput(label="Cena", required=True)
-
-    def __init__(self, interaction, server, mode, typ_transakcji):
-        super().__init__()
-        self.interaction = interaction
+class ModeSelectView(View):
+    def __init__(self, user, action, server):
+        super().__init__(timeout=300)
+        self.user = user
+        self.action = action
         self.server = server
-        self.mode = mode
-        self.typ_transakcji = typ_transakcji
 
-    async def on_submit(self, interaction: discord.Interaction):
-        embed = discord.Embed(
-            title=f"🛒 Nowa oferta sprzedaży",
-            description=(
-                f"**Serwer:** {self.server}\n"
-                f"**Tryb:** {self.mode}\n"
-                f"**Item:** {self.item_name.value}\n"
-                f"**Ilość:** {self.item_quantity.value}\n"
-                f"**Cena:** {self.item_price.value}"
-            ),
-            color=discord.Color.blue()
+        modes = DATA[server].keys()
+        select = discord.ui.Select(
+            placeholder="Wybierz tryb",
+            options=[discord.SelectOption(label=m) for m in modes],
+            custom_id="mode_select"
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        async def callback(interaction: discord.Interaction):
+            if interaction.user != self.user:
+                await interaction.response.send_message("❌ Nie możesz korzystać z czyjegoś ticketa.", ephemeral=True)
+                return
+
+            mode = interaction.data['values'][0]
+            view = ItemSelectView(self.user, self.action, self.server, mode)
+            await interaction.response.edit_message(content=f"Wybrałeś tryb: **{mode}**. Teraz wybierz itemy.", view=view)
+
+        select.callback = callback
+        self.add_item(select)
 
 # --- Item Select ---
 class ItemSelectView(View):
