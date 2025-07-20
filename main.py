@@ -9,7 +9,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 class TicketButton(Button):
     def __init__(self):
         super().__init__(
-            label="Kup wybrane itemy",
+            label="🎟️ kup itemy ",
             style=discord.ButtonStyle.green,
             url="https://discord.com/channels/1373253103174604810/1373305137228939416"
         )
@@ -41,10 +41,10 @@ async def on_ready():
             "channel_id": 1373267159576481842,
             "content": """
 **🛒 Oferta itemów na sprzedaż:**
+💸 **1mln$** — `18zł`
 <:Klata:1374793644246306866> **Set 25** — `30zł`
 <:Miecz:1374791139462352906> **Miecz 25** — `25zł`
 <:Kilof:1374795407493959751> **Kilof 25** — `10zł`
-💸 **1mln$** — `18zł`
 """
         },
         {
