@@ -46,22 +46,20 @@ async def on_ready():
             "channel_id": 1373268875407396914,
             "content": """🛒 **Oferta itemów na sprzedaż**
 💵 4,5k$ — 1zł
-💸 50k$ — 12zł
-💸 550k$ — 130zł
+<:Elytra:1374797373406187580> Elytra — 50zł
 <:ANA2:137479901735931494> Anarchiczny set 2 — 28zł
+<:Klata:1374793644246306866> Anarchiczny set 1 — 9zł
 <:Klata:1374793644246306866> Anarchiczny set 1 — 9zł
 
 🎉 **Eventówki**
-<:Miecz:1374791139462352906> Anarchiczny miecz — 3zł
-<:MieczZajeczy:1375486003891929088> Zajęczy miecz — 65zł
-<:Totem:1374788635211206757> Totem ułaskawienia — 630zł
+<:MieczZajeczy:1375486003891929088> Kruliczy miecz — 100zł
+<:Totem:1374788635211206757> Totem ułaskawienia — 860zł
 <:Excalibur:1374785662191927416> Excalibur — 370zł"""
         },
         {
             "channel_id": 1373270295556788285,
             "content": """🛒 **Oferta itemów na sprzedaż**
 💵 50k$ — 1zł
-💸 1mln$ — 33zł
 
 🎉 **Eventówki**
 <:Excalibur:1374785662191927416> Excalibur — 111zł
