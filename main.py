@@ -181,21 +181,7 @@ class ServerSelectView(View):
         self.add_item(select)
 
 # --- Mode Select ---
-class ModeSelectView(View):
-    def __init__(self, user, action, server):
-        super().__init__(timeout=300)
-        self.user = user
-        self.action = action
-        self.server = server
-
-        modes = DATA[server].keys()
-        select = discord.ui.Select(
-            placeholder="Wybierz tryb",
-            options=[discord.SelectOption(label=m) for m in modes],
-            custom_id="mode_select"
-        )
-
-       class ItemModal(Modal, title="Wprowadź itemy na sprzedaż"):
+class ItemModal(Modal, title="Wprowadź itemy na sprzedaż"):
     item_name = TextInput(label="Nazwa itemu", required=True)
     item_quantity = TextInput(label="Ilość", required=True)
     item_price = TextInput(label="Cena", required=True)
