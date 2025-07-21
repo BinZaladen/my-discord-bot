@@ -30,17 +30,9 @@ ROLE_CUSTOMER_ID = 1374099985288921088  # Rola 'customer' do nadania po realizac
 CHANNEL_RATINGS_ID = 1375528888586731762  # Kanał gdzie będą pokazywane oceny
 
 DATA = {
-    "𝐂𝐑𝐀𝐅𝐓𝐏𝐋𝐀𝐘": {
-        "𝐆𝐈𝐋𝐃𝐈𝐄": [" Elytra", "Buty flasha", "Miecz 6", "Shulker s2", "Shulker totemów"],
-        "𝐁𝐎𝐗𝐏𝐕𝐏": ["Set 25", "Miecz 25", "Kilof 25", "kasa"],
-    },
     "𝐀𝐍𝐀𝐑𝐂𝐇𝐈𝐀": {
         "𝐋𝐈𝐅𝐄𝐒𝐓𝐄𝐀𝐋": [" Elytra", "Anarchiczny set 2", "Anarchiczny set 1", "Anarchiczny miecz", "Kruliczy miecz", "Totem ułaskawienia", "Excalibur", "kasa"],
         "𝐁𝐎𝐗𝐏𝐕𝐏": ["Excalibur", "Totem ułaskawienia", "Sakiewka", "kasa"],
-    },
-    "𝐑𝐀𝐏𝐘": {
-        "𝐋𝐈𝐅𝐄𝐒𝐓𝐄𝐀𝐋": ["nie dostępne", "nie dostępne", "nie dostępne"],
-        "𝐁𝐎𝐗𝐏𝐕𝐏": ["Miecz 35", "Set 35", "kasa"],
     },
     "𝐏𝐘𝐊𝐌𝐂": {
         "𝐋𝐈𝐅𝐄𝐒𝐓𝐄𝐀𝐋": ["Buda", "Love swap", "Klata meduzy", "kasa"],
